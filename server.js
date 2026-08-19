@@ -21,7 +21,7 @@ const upload = multer({ dest: path.join(__dirname, "uploads/") });
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "my_secret_verify_token_123";
-const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "admin123";
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "9569";
 const APP_ID = process.env.APP_ID || "1529253259236329";
 const PORT = process.env.PORT || 3000;
 
