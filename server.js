@@ -359,6 +359,13 @@ app.post("/api/profile", authCheck, async (req, res) => {
 
 // ---- PRIVACY POLICY ----
 app.get("/privacy-policy", (req, res) => {
+  res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Privacy Policy</title><style>body{font-family:'Segoe UI',sans-serif;padding:40px;max-width:800px;margin:0 auto;line-height:1.7;color:#333}h1{color:#1a73e8;border-bottom:2px solid #e8eaed;padding-bottom:10px}h2{color:#202124;margin-top:25px}.footer{margin-top:40px;font-size:.9em;color:#70757a;border-top:1px solid #e8eaed;padding-top:15px}</style></head><body><h1>Privacy Policy</h1><p><strong>Effective Date:</strong> August 19, 2026</p><p>Your privacy is important to us. We do not collect, store, or sell any personal data.</p><h2>Contact</h2><p>arushiexx@gmail.com</p><div class="footer">&copy; 2026 Automation</div></body></html>`);
+});
+
+// ============================================
+// WHATSAPP WEB CLONE - CHAT DASHBOARD
+// ============================================
+app.get("/chat", (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
