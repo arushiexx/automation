@@ -1,3 +1,6 @@
 node_modules/
 .env
 customers.json
+
+auth_info_baileys/
+

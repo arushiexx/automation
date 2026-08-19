@@ -1,29 +1,33 @@
-// ===========================================
-// WhatsApp Auto-Reply System
-// Sirf PEHLE message pe auto reply — fir manual
-// ===========================================
+// ==========================================================
+// WhatsApp Web Auto-Reply System (Baileys QR-Based)
+// Sirf PEHLE message pe auto-reply — fir full manual chat
+// ==========================================================
 
 require("dotenv").config();
 const express = require("express");
-const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
+const qrcode = require("qrcode");
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} = require("@whiskeysockets/baileys");
+const pino = require("pino");
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// ---- CONFIG ----
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "my_secret_verify_token_123";
 const PORT = process.env.PORT || 3000;
 
-// Auto-reply message (newlines supported with \n)
-const AUTO_REPLY_MESSAGE =
+// ---- AUTO-REPLY MESSAGE CONFIG ----
+let AUTO_REPLY_MESSAGE =
   process.env.AUTO_REPLY_MESSAGE ||
   `Demo ₹39\nFree me demo nahi milega ❌\n\nMeri photo channel me upload hai jaakr dekh lo 👇\n\nJise service chahiye YES likh ke msg kare, rate list bhejungi 💕\n\n📌 Channel: https://whatsapp.com/channel/YOUR_CHANNEL_LINK`;
 
-// ---- CUSTOMER DATABASE (Simple JSON file) ----
+// ---- DATABASE: CUSTOMERS (JSON file) ----
 const DB_FILE = path.join(__dirname, "customers.json");
 
 function loadCustomers() {
@@ -37,323 +41,369 @@ function loadCustomers() {
   return {};
 }
 
-function saveCustomers(customers) {
+function saveCustomers(data) {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(customers, null, 2));
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
   } catch (err) {
     console.error("Error saving customers:", err.message);
   }
 }
 
-// Load existing customers on startup
 let customers = loadCustomers();
-console.log(`📋 Loaded ${Object.keys(customers).length} existing customers`);
+console.log(`📋 Loaded ${Object.keys(customers).length} customers from database.`);
 
-// ---- SAFETY: Rate Limiting ----
+// ---- SAFETY: Rate Limiting & Delays ----
 let repliesSentThisMinute = 0;
 const MAX_REPLIES_PER_MINUTE = 30;
 
-// Reset counter every minute
 setInterval(() => {
   if (repliesSentThisMinute > 0) {
-    console.log(`📊 Replies sent last minute: ${repliesSentThisMinute}`);
+    console.log(`📊 Replies sent in last minute: ${repliesSentThisMinute}`);
   }
   repliesSentThisMinute = 0;
 }, 60 * 1000);
 
-// ---- SAFETY: Random Delay (5-15 seconds) ----
 function getRandomDelay() {
   const hour = new Date().getHours();
-  // Night mode: 12 AM - 7 AM → longer delay (20-60 sec)
+  // Night Mode: 12 AM - 7 AM -> 20-60 sec
   if (hour >= 0 && hour < 7) {
-    return Math.floor(Math.random() * 40000) + 20000; // 20-60 sec
+    return Math.floor(Math.random() * 40000) + 20000;
   }
-  // Normal hours → short delay (5-15 sec)
-  return Math.floor(Math.random() * 10000) + 5000; // 5-15 sec
+  // Daytime: 5-15 sec natural delay
+  return Math.floor(Math.random() * 10000) + 5000;
 }
 
-// ---- SEND WHATSAPP MESSAGE ----
-async function sendWhatsAppMessage(to, message) {
-  try {
-    const response = await axios({
-      method: "POST",
-      url: `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      data: {
-        messaging_product: "whatsapp",
-        to: to,
-        type: "text",
-        text: {
-          body: message,
-        },
-      },
-    });
-    console.log(`✅ Reply sent to ${to}`);
-    return true;
-  } catch (error) {
-    console.error(
-      `❌ Failed to send to ${to}:`,
-      error.response?.data || error.message
-    );
-    return false;
-  }
-}
+// ---- STATE MANAGEMENT ----
+let currentQrDataUrl = null;
+let connectionStatus = "Connecting...";
+let connectedUser = null;
+let sock = null;
 
-// ---- MARK MESSAGE AS READ (natural feel) ----
-async function markAsRead(messageId) {
-  try {
-    await axios({
-      method: "POST",
-      url: `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      data: {
-        messaging_product: "whatsapp",
-        status: "read",
-        message_id: messageId,
-      },
-    });
-  } catch (error) {
-    // Ignore read receipt errors
-  }
-}
+// ---- BAILEYS WHATSAPP CONNECTION ----
+async function startWhatsApp() {
+  const authFolder = path.join(__dirname, "auth_info_baileys");
+  const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+  const { version, isLatest } = await fetchLatestBaileysVersion();
 
-// ---- WEBHOOK VERIFICATION (Meta requires this) ----
-app.get("/webhook", (req, res) => {
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
+  console.log(`🚀 Starting WhatsApp Web Bot v${version.join(".")} (Latest: ${isLatest})`);
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("✅ Webhook verified successfully!");
-    res.status(200).send(challenge);
-  } else {
-    console.log("❌ Webhook verification failed");
-    res.sendStatus(403);
-  }
-});
+  sock = makeWASocket({
+    version,
+    auth: state,
+    logger: pino({ level: "silent" }),
+    printQRInTerminal: true,
+    browser: ["WhatsApp AutoReply", "Chrome", "1.0.0"],
+    syncFullHistory: false,
+    generateHighQualityLinkPreview: true,
+  });
 
-// ---- RECEIVE MESSAGES (Webhook) ----
-app.post("/webhook", async (req, res) => {
-  // Always respond 200 immediately (Meta requires this)
-  res.sendStatus(200);
+  sock.ev.on("creds.update", saveCreds);
 
-  try {
-    const body = req.body;
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect, qr } = update;
 
-    // Check if this is a valid WhatsApp message
-    if (
-      !body.object ||
-      !body.entry ||
-      !body.entry[0]?.changes?.[0]?.value?.messages
-    ) {
-      return;
+    if (qr) {
+      connectionStatus = "QR_READY";
+      currentQrDataUrl = await qrcode.toDataURL(qr);
+      console.log("\n📲 [QR CODE READY] Please scan the QR Code on screen or terminal!\n");
     }
 
-    const changes = body.entry[0].changes[0];
-    const value = changes.value;
-    const messages = value.messages;
-
-    if (!messages || messages.length === 0) return;
-
-    for (const message of messages) {
-      const from = message.from; // Customer phone number
-      const messageId = message.id;
-      const timestamp = message.timestamp;
-      const customerName =
-        value.contacts?.[0]?.profile?.name || "Unknown";
-
-      console.log(
-        `📩 Message from ${customerName} (${from}): ${
-          message.text?.body || "[media/other]"
-        }`
-      );
-
-      // Mark message as read (blue ticks - natural feel)
-      await markAsRead(messageId);
-
-      // Check: Is this a NEW customer?
-      if (customers[from]) {
-        console.log(
-          `⏭️ Already replied to ${from}. Skipping.`
-        );
-        continue; // Already sent rate card — do nothing
-      }
-
-      // ✅ IMMEDIATELY mark customer as seen (prevents duplicate replies)
-      customers[from] = {
-        name: customerName,
-        firstMessageAt: new Date().toISOString(),
-        firstReplyAt: null, // Will update when reply actually sends
-        replySent: false, // Pending
-      };
-      saveCustomers(customers);
-
-      // Safety: Rate limit check
-      if (repliesSentThisMinute >= MAX_REPLIES_PER_MINUTE) {
-        console.log(
-          `⚠️ Rate limit reached (${MAX_REPLIES_PER_MINUTE}/min). Queuing ${from} for later.`
-        );
-        setTimeout(() => {
-          processNewCustomer(from, customerName);
-        }, 60000 + getRandomDelay());
-        continue;
-      }
-
-      // Process new customer with random delay
-      const delay = getRandomDelay();
-      console.log(
-        `⏳ New customer ${customerName} (${from}). Replying in ${Math.round(
-          delay / 1000
-        )}s...`
-      );
-
-      setTimeout(() => {
-        processNewCustomer(from, customerName);
-      }, delay);
+    if (connection === "open") {
+      connectionStatus = "CONNECTED";
+      currentQrDataUrl = null;
+      connectedUser = sock.user?.id ? sock.user.id.split(":")[0] : "Connected";
+      console.log(`\n🟢 [SUCCESS] WhatsApp Connected Successfully as +${connectedUser}!\n`);
     }
-  } catch (error) {
-    console.error("❌ Error processing message:", error.message);
-  }
-});
 
-// ---- PROCESS NEW CUSTOMER ----
-async function processNewCustomer(from, customerName) {
-  // Check if reply already sent (race condition safety)
-  if (customers[from]?.replySent) {
-    console.log(`⏭️ Already replied to ${from}. Skipping.`);
-    return;
-  }
+    if (connection === "close") {
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-  // Safety: Rate limit re-check
+      connectionStatus = shouldReconnect ? "RECONNECTING" : "LOGGED_OUT";
+      currentQrDataUrl = null;
+      console.log(
+        `🔴 Connection closed due to: ${lastDisconnect?.error?.message || "Unknown"}, reconnecting: ${shouldReconnect}`
+      );
+
+      if (shouldReconnect) {
+        setTimeout(startWhatsApp, 3000);
+      } else {
+        console.log("⚠️ Logged out. Clearing auth folder and restarting for new QR...");
+        try {
+          fs.rmSync(authFolder, { recursive: true, force: true });
+        } catch (e) {}
+        setTimeout(startWhatsApp, 2000);
+      }
+    }
+  });
+
+  // ---- LISTEN FOR INCOMING MESSAGES ----
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (type !== "notify") return;
+
+    for (const msg of messages) {
+      try {
+        // Skip messages sent by self
+        if (msg.key.fromMe) continue;
+
+        const sender = msg.key.remoteJid;
+
+        // Skip status broadcast and groups
+        if (!sender || sender.includes("status@broadcast") || sender.includes("@g.us")) {
+          continue;
+        }
+
+        const phoneNumber = sender.replace("@s.whatsapp.net", "");
+        const pushName = msg.pushName || "Customer";
+
+        // Extract message text if any
+        const messageText =
+          msg.message?.conversation ||
+          msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption ||
+          "[Media/Other]";
+
+        console.log(`📩 New message from ${pushName} (+${phoneNumber}): "${messageText}"`);
+
+        // Check if customer already received rate card / auto-reply
+        if (customers[phoneNumber]) {
+          console.log(`⏭️ Already replied to +${phoneNumber}. Skipping auto-reply for manual chat.`);
+          continue;
+        }
+
+        // Immediately save customer to prevent duplicate replies during delay
+        customers[phoneNumber] = {
+          name: pushName,
+          firstMessageAt: new Date().toISOString(),
+          firstReplyAt: null,
+          replySent: false,
+        };
+        saveCustomers(customers);
+
+        // Calculate natural delay
+        const delay = getRandomDelay();
+        console.log(
+          `⏳ New customer detected: +${phoneNumber} (${pushName}). Sending auto-reply in ${Math.round(
+            delay / 1000
+          )}s...`
+        );
+
+        setTimeout(async () => {
+          await processAutoReply(sender, phoneNumber, pushName, msg.key);
+        }, delay);
+      } catch (err) {
+        console.error("Error processing message:", err.message);
+      }
+    }
+  });
+}
+
+// ---- SEND AUTO-REPLY ----
+async function processAutoReply(jid, phoneNumber, pushName, messageKey) {
+  // Safety check: already sent?
+  if (customers[phoneNumber]?.replySent) return;
+
+  // Safety check: rate limit
   if (repliesSentThisMinute >= MAX_REPLIES_PER_MINUTE) {
-    console.log(`⚠️ Rate limit hit. Retrying ${from} in 60s...`);
+    console.log(`⚠️ Rate limit reached (${MAX_REPLIES_PER_MINUTE}/min). Retrying in 60s for +${phoneNumber}`);
     setTimeout(() => {
-      processNewCustomer(from, customerName);
+      processAutoReply(jid, phoneNumber, pushName, messageKey);
     }, 60000);
     return;
   }
 
-  // Send auto-reply
-  const success = await sendWhatsAppMessage(from, AUTO_REPLY_MESSAGE);
+  try {
+    // Send Read Receipt (Blue Ticks)
+    if (sock && messageKey) {
+      await sock.readMessages([messageKey]);
+    }
 
-  if (success) {
-    // Update customer record — reply sent
-    customers[from] = {
-      ...customers[from],
-      firstReplyAt: new Date().toISOString(),
-      replySent: true,
-    };
-    saveCustomers(customers);
-    repliesSentThisMinute++;
+    // Send the Auto-Reply Message
+    if (sock) {
+      await sock.sendMessage(jid, { text: AUTO_REPLY_MESSAGE });
+      repliesSentThisMinute++;
 
-    console.log(
-      `✅ Rate card sent to ${customerName} (${from}). Total customers: ${
-        Object.keys(customers).length
-      }`
-    );
-  } else {
-    console.log(`⚠️ Reply failed for ${from}. Will NOT retry to avoid spam.`);
-    // Mark as sent anyway to prevent retry loops
-    customers[from].replySent = true;
-    saveCustomers(customers);
+      // Update Database
+      customers[phoneNumber] = {
+        ...customers[phoneNumber],
+        firstReplyAt: new Date().toISOString(),
+        replySent: true,
+      };
+      saveCustomers(customers);
+
+      console.log(
+        `✅ [AUTO-REPLY SENT] Rate card delivered to +${phoneNumber} (${pushName}). Total unique customers: ${
+          Object.keys(customers).length
+        }`
+      );
+    }
+  } catch (error) {
+    console.error(`❌ Failed to send reply to +${phoneNumber}:`, error.message);
+    if (customers[phoneNumber]) {
+      customers[phoneNumber].replySent = true;
+      saveCustomers(customers);
+    }
   }
 }
 
-// ---- PRIVACY POLICY ROUTE ----
-app.get("/privacy-policy", (req, res) => {
+// ---- WEB DASHBOARD & API ----
+app.get("/", (req, res) => {
+  const total = Object.keys(customers).length;
+  const today = new Date().toISOString().split("T")[0];
+  const todayCount = Object.values(customers).filter((c) =>
+    c.firstReplyAt?.startsWith(today)
+  ).length;
+
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Privacy Policy - Automation</title>
+      <title>WhatsApp Auto-Reply Dashboard</title>
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
       <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.7; color: #333; }
-        h1 { color: #1a73e8; border-bottom: 2px solid #e8eaed; padding-bottom: 10px; }
-        h2 { color: #202124; margin-top: 25px; }
-        p { margin-bottom: 15px; }
-        .footer { margin-top: 40px; font-size: 0.9em; color: #70757a; border-top: 1px solid #e8eaed; padding-top: 15px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
+        body { background: #0f172a; color: #f8fafc; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 30px 15px; }
+        .container { max-width: 850px; width: 100%; }
+        header { text-align: center; margin-bottom: 25px; }
+        h1 { font-size: 2.2rem; background: linear-gradient(135deg, #25D366, #128C7E); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .badge { display: inline-block; padding: 6px 14px; border-radius: 50px; font-weight: 600; font-size: 0.85rem; margin-top: 10px; }
+        .badge.connected { background: rgba(37, 211, 102, 0.2); color: #25D366; border: 1px solid #25D366; }
+        .badge.qr { background: rgba(234, 179, 8, 0.2); color: #eab308; border: 1px solid #eab308; }
+        .badge.disconnected { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .card { background: #1e293b; border-radius: 16px; padding: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .card h3 { font-size: 0.9rem; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card .stat { font-size: 2rem; font-weight: 700; color: #38bdf8; }
+        .qr-section { background: #1e293b; border-radius: 16px; padding: 30px; border: 1px solid #334155; text-align: center; margin-bottom: 25px; }
+        .qr-box { background: white; padding: 15px; border-radius: 12px; display: inline-block; margin: 15px 0; }
+        .qr-box img { display: block; width: 250px; height: 250px; }
+        .instructions { color: #cbd5e1; font-size: 0.95rem; line-height: 1.6; max-width: 500px; margin: 0 auto 15px; text-align: left; background: #0f172a; padding: 15px; border-radius: 10px; }
+        .editor-section { background: #1e293b; border-radius: 16px; padding: 25px; border: 1px solid #334155; margin-bottom: 25px; }
+        textarea { width: 100%; height: 160px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 10px; padding: 15px; font-size: 1rem; line-height: 1.5; resize: vertical; outline: none; }
+        textarea:focus { border-color: #25D366; }
+        .btn { background: #25D366; color: #0f172a; font-weight: 700; padding: 12px 24px; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; transition: 0.2s; margin-top: 10px; }
+        .btn:hover { background: #1eb956; transform: translateY(-1px); }
+        .connected-box { background: rgba(37, 211, 102, 0.1); border: 1px solid #25D366; padding: 25px; border-radius: 12px; }
+        .btn-restart { background: #ef4444; color: white; padding: 8px 16px; border-radius: 6px; font-size: 0.85rem; border: none; cursor: pointer; }
       </style>
     </head>
     <body>
-      <h1>Privacy Policy</h1>
-      <p><strong>Effective Date:</strong> August 19, 2026</p>
-      
-      <p>Welcome to <strong>Automation</strong>. Your privacy is critically important to us. This Privacy Policy document outlines the types of information that is collected and recorded by Automation and how we use it.</p>
-      
-      <h2>1. Information We Collect</h2>
-      <p>We do not collect, harvest, store, or sell any personal data from users interacting with our services. All communications are processed strictly in real-time to facilitate automated customer support inquiries.</p>
-      
-      <h2>2. Use of Data</h2>
-      <p>Any transient message information received is utilized solely to deliver automated response messages requested by the user. No personal identification information, phone numbers, or conversation logs are retained or shared with third parties.</p>
+      <div class="container">
+        <header>
+          <h1>WhatsApp Auto-Reply System</h1>
+          <div class="badge ${
+            connectionStatus === "CONNECTED"
+              ? "connected"
+              : connectionStatus === "QR_READY"
+              ? "qr"
+              : "disconnected"
+          }">
+            ● ${connectionStatus === "CONNECTED" ? `Connected (+${connectedUser})` : connectionStatus === "QR_READY" ? "Scan QR Code Below" : connectionStatus}
+          </div>
+        </header>
 
-      <h2>3. Third-Party Services</h2>
-      <p>Our service integrates with official Meta WhatsApp Business Platform APIs. Data processing complies strictly with Meta Developer Data Policies and General Data Protection Regulation (GDPR) standards.</p>
+        <div class="grid">
+          <div class="card">
+            <h3>Total Unique Customers</h3>
+            <div class="stat">${total}</div>
+          </div>
+          <div class="card">
+            <h3>Replies Sent Today</h3>
+            <div class="stat">${todayCount}</div>
+          </div>
+          <div class="card">
+            <h3>Rate Limit & Delay</h3>
+            <div class="stat" style="font-size: 1.3rem; margin-top: 8px; color: #a855f7;">5-15s / 30pm</div>
+          </div>
+        </div>
 
-      <h2>4. Data Security</h2>
-      <p>We implement enterprise-grade security measures to safeguard communication channels against unauthorized access, alteration, or disclosure.</p>
+        ${
+          connectionStatus === "CONNECTED"
+            ? `
+          <div class="qr-section connected-box">
+            <h2 style="color: #25D366; margin-bottom: 10px;">🟢 Bot Active & Running!</h2>
+            <p style="color: #cbd5e1; margin-bottom: 15px;">Aapka WhatsApp number (+${connectedUser}) successfully connected hai.<br>Pehle message par turant auto-reply jayega aur baad me aap apne phone se manual baat kar sakte hain.</p>
+            <form action="/relink" method="POST" onsubmit="return confirm('Kya aap naye number se QR scan karna chahte hain?')">
+              <button type="submit" class="btn-restart">Change Account / Re-scan QR</button>
+            </form>
+          </div>
+        `
+            : `
+          <div class="qr-section">
+            <h2>📲 Link WhatsApp (Scan QR Code)</h2>
+            <div class="instructions">
+              <strong>Kaise connect karein:</strong><br>
+              1. Apne phone me WhatsApp kholein (<strong>9540860818</strong>).<br>
+              2. <strong>⋮ (3 dots)</strong> ya <strong>Settings</strong> par jayein.<br>
+              3. <strong>Linked Devices (लिंक्ड डिवाइस)</strong> par click karein.<br>
+              4. <strong>Link a Device</strong> dabakar neeche diye gaye QR code ko scan karein.
+            </div>
+            ${
+              currentQrDataUrl
+                ? `<div class="qr-box"><img src="${currentQrDataUrl}" alt="WhatsApp QR Code"></div>`
+                : `<p style="padding: 40px; color: #94a3b8;">⏳ Generating QR Code... (Auto-refreshing in 3s)</p>`
+            }
+          </div>
+        `
+        }
 
-      <h2>5. Contact Us</h2>
-      <p>If you have additional questions or require more information about our Privacy Policy, do not hesitate to contact us at <strong>arushiexx@gmail.com</strong>.</p>
-
-      <div class="footer">
-        &copy; 2026 Automation. All rights reserved.
+        <div class="editor-section">
+          <h2 style="margin-bottom: 15px;">📝 Auto-Reply Message (Rate Card / Demo)</h2>
+          <form action="/update-message" method="POST">
+            <textarea name="message" placeholder="Type your auto reply text here...">${AUTO_REPLY_MESSAGE}</textarea>
+            <br>
+            <button type="submit" class="btn">💾 Save Auto-Reply Message</button>
+          </form>
+        </div>
       </div>
+
+      <script>
+        const status = "${connectionStatus}";
+        if (status !== "CONNECTED") {
+          setTimeout(() => {
+            window.location.reload();
+          }, 3000);
+        }
+      </script>
     </body>
     </html>
   `);
 });
 
-// ---- HEALTH CHECK / STATS ----
-app.get("/", (req, res) => {
-  const totalCustomers = Object.keys(customers).length;
-  const today = new Date().toISOString().split("T")[0];
-  const todayCustomers = Object.values(customers).filter((c) =>
-    c.firstReplyAt?.startsWith(today)
-  ).length;
-
-  res.json({
-    status: "✅ Running",
-    message: "WhatsApp Auto-Reply System",
-    stats: {
-      totalCustomers,
-      todayReplies: todayCustomers,
-      repliesThisMinute: repliesSentThisMinute,
-      maxPerMinute: MAX_REPLIES_PER_MINUTE,
-    },
-  });
+app.post("/update-message", (req, res) => {
+  const { message } = req.body;
+  if (message && message.trim()) {
+    AUTO_REPLY_MESSAGE = message.trim();
+    console.log("📝 Auto-reply message updated from dashboard!");
+  }
+  res.redirect("/");
 });
 
-// ---- UPDATE AUTO-REPLY MESSAGE ----
-app.post("/update-message", express.json(), (req, res) => {
-  const { message, secret } = req.body;
-  if (secret !== VERIFY_TOKEN) {
-    return res.status(403).json({ error: "Unauthorized" });
-  }
-  if (!message) {
-    return res.status(400).json({ error: "Message required" });
-  }
-  process.env.AUTO_REPLY_MESSAGE = message;
-  console.log(`📝 Auto-reply message updated!`);
-  res.json({ success: true, newMessage: message });
+app.post("/relink", (req, res) => {
+  try {
+    if (sock) {
+      sock.logout().catch(() => {});
+    }
+    const authFolder = path.join(__dirname, "auth_info_baileys");
+    fs.rmSync(authFolder, { recursive: true, force: true });
+  } catch (e) {}
+  setTimeout(() => {
+    startWhatsApp();
+    res.redirect("/");
+  }, 1000);
 });
 
-// ---- START SERVER ----
+startWhatsApp();
+
 app.listen(PORT, () => {
   console.log(`
-╔═══════════════════════════════════════════════╗
-║   WhatsApp Auto-Reply System                  ║
-║   🟢 Server running on port ${PORT}              ║
-║   📋 ${Object.keys(customers).length} customers in database            ║
-║   🛡️ Max ${MAX_REPLIES_PER_MINUTE} replies/minute                  ║
-║   ⏳ Random delay: 5-15s (night: 20-60s)      ║
-╚═══════════════════════════════════════════════╝
+╔════════════════════════════════════════════════════════════╗
+║   WhatsApp Web Auto-Reply Bot                              ║
+║   🟢 Dashboard: http://localhost:${PORT}                     ║
+║   📋 ${Object.keys(customers).length} customers in database                             ║
+║   🛡️ Safety: 5-15s delay, 30 replies/min                   ║
+╚════════════════════════════════════════════════════════════╝
   `);
 });
