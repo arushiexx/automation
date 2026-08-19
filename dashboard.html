@@ -335,7 +335,15 @@ var day=d.toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"
 if(day!==lastDay){html+='<div class="msg-day"><span>'+day+'</span></div>';lastDay=day;}
 var time=d.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
 var cls=m.dir==="in"?"msg-in":"msg-out";
-html+='<div class="msg-bubble '+cls+'">'+m.text.replace(/\n/g,"<br>")+'<div class="msg-time">'+time+'</div></div>';
+var content = m.text.replace(/\n/g,"<br>");
+if (m.text.startsWith("[IMAGE:")) {
+  var mediaId = m.text.substring(7, m.text.length-1);
+  content = '<img src="/api/media/' + mediaId + '?token=' + TOKEN + '" style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block">';
+} else if (m.text.startsWith("[OUT_IMAGE:")) {
+  var url = m.text.substring(11, m.text.length-1);
+  content = '<img src="' + url + '" style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block">';
+}
+html+='<div class="msg-bubble '+cls+'">'+content+'<div class="msg-time">'+time+'</div></div>';
 }
 el.innerHTML=html+'<div style="clear:both"></div>';
 if(!silent||wasAtBottom)el.scrollTop=el.scrollHeight;
@@ -348,7 +356,7 @@ if(!file || !currentPhone) return;
 document.getElementById('mediaFile').value = ""; // reset
 var fd = new FormData();
 fd.append("phone", currentPhone);
-fd.append("file", file);
+fd.append("file", file, file.name || "image.jpg");
 var input = document.getElementById("msgInput");
 var oldPlaceholder = input.placeholder;
 input.placeholder = "Sending image...";

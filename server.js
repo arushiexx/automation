@@ -10,7 +10,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-const upload = multer({ dest: path.join(__dirname, "uploads/") });
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, path.join(__dirname, "uploads/")); },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || ".jpg";
+    cb(null, Date.now() + "-" + Math.round(Math.random() * 1e9) + ext);
+  }
+});
+const upload = multer({ storage: storage });
 
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
@@ -147,7 +154,9 @@ app.post("/webhook", async function(req, res) {
       var from = message.from;
       var messageId = message.id;
       var customerName = (value.contacts && value.contacts[0] && value.contacts[0].profile) ? value.contacts[0].profile.name : "Unknown";
-      var msgText = (message.text && message.text.body) ? message.text.body : "[media/other]";
+      var msgText = "[media/other]";
+      if (message.type === "text" && message.text) msgText = message.text.body;
+      else if (message.type === "image" && message.image) msgText = "[IMAGE:" + message.image.id + "]";
 
       console.log("Message from " + customerName + " (" + from + "): " + msgText);
 
@@ -360,6 +369,27 @@ app.get("/", function(req, res) {
   });
 });
 
+// PROXY MEDIA
+app.get("/api/media/:id", authCheck, async function(req, res) {
+  try {
+    var response = await axios({
+      method: "GET",
+      url: "https://graph.facebook.com/v21.0/" + req.params.id,
+      headers: { Authorization: "Bearer " + WHATSAPP_TOKEN }
+    });
+    var mediaRes = await axios({
+      method: "GET",
+      url: response.data.url,
+      responseType: "stream",
+      headers: { Authorization: "Bearer " + WHATSAPP_TOKEN }
+    });
+    res.set("Content-Type", mediaRes.headers["content-type"]);
+    mediaRes.data.pipe(res);
+  } catch(e) {
+    res.status(500).send("Error");
+  }
+});
+
 // SEND MEDIA
 app.post("/api/send-media", authCheck, upload.single("file"), async function(req, res) {
   var phone = req.body.phone;
@@ -383,7 +413,7 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
       },
     });
 
-    storeMessage(phone, "You", "[Image Sent]", "out");
+    storeMessage(phone, "You", "[OUT_IMAGE:" + fileUrl + "]", "out");
     res.json({success: true});
   } catch (error) {
     console.error("Failed to send image:", error.response ? error.response.data : error.message);
