@@ -8,6 +8,7 @@ const multer = require("multer");
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const upload = multer({ dest: path.join(__dirname, "uploads/") });
 
@@ -357,6 +358,37 @@ app.get("/", function(req, res) {
       repliesThisMinute: repliesSentThisMinute,
     },
   });
+});
+
+// SEND MEDIA
+app.post("/api/send-media", authCheck, upload.single("file"), async function(req, res) {
+  var phone = req.body.phone;
+  if (!phone || !req.file) return res.status(400).json({error: "Missing phone or file"});
+
+  var fileUrl = "https://" + req.get("host") + "/uploads/" + req.file.filename;
+
+  try {
+    await axios({
+      method: "POST",
+      url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
+      headers: {
+        Authorization: "Bearer " + WHATSAPP_TOKEN,
+        "Content-Type": "application/json",
+      },
+      data: {
+        messaging_product: "whatsapp",
+        to: phone,
+        type: "image",
+        image: { link: fileUrl }
+      },
+    });
+
+    storeMessage(phone, "You", "[Image Sent]", "out");
+    res.json({success: true});
+  } catch (error) {
+    console.error("Failed to send image:", error.response ? error.response.data : error.message);
+    res.status(500).json({error: "Failed to send image"});
+  }
 });
 
 // CLEAR ALL DATA

@@ -9,7 +9,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden}
-body{font-family:'Inter',sans-serif;background:#111b21;color:#e9edef;height:100vh;touch-action:manipulation}
+body{font-family:'Inter',sans-serif;background:#111b21;color:#e9edef;height:100%;touch-action:manipulation}
 
 /* LOGIN */
 #loginScreen{display:flex;align-items:center;justify-content:center;height:100vh;background:linear-gradient(135deg,#0a1014,#1a2a33)}
@@ -23,7 +23,7 @@ body{font-family:'Inter',sans-serif;background:#111b21;color:#e9edef;height:100v
 .login-error{color:#ea4335;font-size:13px;margin-top:8px;display:none}
 
 /* SCREENS */
-#app{display:none;height:100vh;width:100%;position:relative}
+#app{display:none;height:100%;width:100%;position:relative}
 
 /* SCREEN 1: CONTACT LIST */
 #contactScreen{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;background:#111b21;z-index:10}
@@ -68,6 +68,7 @@ body{font-family:'Inter',sans-serif;background:#111b21;color:#e9edef;height:100v
 .input-bar{padding:6px 8px;background:#1f2c34;display:flex;align-items:center;gap:6px}
 .input-bar input{flex:1;padding:12px 14px;background:#2a3942;border:none;border-radius:24px;color:#e9edef;font-size:15px;outline:none}
 .input-bar button{width:44px;height:44px;background:#00a884;color:#fff;border:none;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.input-bar button.attach-btn{background:transparent;color:#8696a0;font-size:22px}
 .input-bar button:active{background:#008f72}
 
 /* SCREEN 3: SETTINGS */
@@ -156,6 +157,8 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
 </div>
 <div class="messages-area" id="messagesArea"></div>
 <div class="input-bar">
+<button class="attach-btn" onclick="document.getElementById('mediaFile').click()">&#128206;</button>
+<input type="file" id="mediaFile" accept="image/*" style="display:none" onchange="sendMedia(event)">
 <input type="text" id="msgInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMsg()">
 <button onclick="sendMsg()">&#10148;</button>
 </div>
@@ -336,6 +339,28 @@ html+='<div class="msg-bubble '+cls+'">'+m.text.replace(/\n/g,"<br>")+'<div clas
 }
 el.innerHTML=html+'<div style="clear:both"></div>';
 if(!silent||wasAtBottom)el.scrollTop=el.scrollHeight;
+});
+}
+
+function sendMedia(e){
+var file = e.target.files[0];
+if(!file || !currentPhone) return;
+document.getElementById('mediaFile').value = ""; // reset
+var fd = new FormData();
+fd.append("phone", currentPhone);
+fd.append("file", file);
+var input = document.getElementById("msgInput");
+var oldPlaceholder = input.placeholder;
+input.placeholder = "Sending image...";
+api("/api/send-media", { method: "POST", body: fd })
+.then(function(r){return r.json()})
+.then(function(){
+  input.placeholder = oldPlaceholder;
+  loadMessages(currentPhone);
+  setTimeout(function(){loadConversations()},500);
+}).catch(function(){
+  input.placeholder = oldPlaceholder;
+  alert("Failed to send image");
 });
 }
 
