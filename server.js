@@ -265,6 +265,36 @@ async function processNewCustomer(from, customerName) {
   }
 }
 
+// ---- PRIVACY POLICY ROUTE ----
+app.get("/privacy-policy", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Privacy Policy - Automation</title>
+      <style>
+        body { font-family: sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+        h1 { color: #333; }
+      </style>
+    </head>
+    <body>
+      <h1>Privacy Policy</h1>
+      <p>Last updated: August 19, 2026</p>
+      <p>This Privacy Policy describes how your personal information is collected, used, and shared when you interact with our WhatsApp Auto-Reply service.</p>
+      <h2>Information We Collect</h2>
+      <p>When you send a message to our WhatsApp service, we collect your phone number, profile name, and the text of your message to automatically reply to your queries.</p>
+      <h2>How We Use Your Information</h2>
+      <p>We use the information we collect solely to provide automated responses and rate card details requested by you.</p>
+      <h2>Data Retention</h2>
+      <p>We store phone numbers strictly for rate-limiting and preventing duplicate spam responses.</p>
+      <h2>Contact Us</h2>
+      <p>If you have any questions about this Privacy Policy, please contact us at arushiexx@gmail.com.</p>
+    </body>
+    </html>
+  `);
+});
+
 // ---- HEALTH CHECK / STATS ----
 app.get("/", (req, res) => {
   const totalCustomers = Object.keys(customers).length;
