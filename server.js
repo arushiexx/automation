@@ -650,14 +650,14 @@ function renderContacts(data) {
     const time = c.lastTime ? new Date(c.lastTime).toLocaleTimeString("en-IN", {hour:"2-digit",minute:"2-digit"}) : "";
     const active = c.phone === currentPhone ? "active" : "";
     const lastMsg = c.lastMessage.length > 40 ? c.lastMessage.substring(0,40) + "..." : c.lastMessage;
-    return `<div class="contact-item \${active}" onclick="openChat('\${c.phone}','\${(c.name||"").replace(/'/g,"\\\\'")}')">
-      <div class="contact-avatar">\${initials}</div>
+    return \`<div class="contact-item ${active}" onclick="openChat('${c.phone}','${(c.name||"").replace(/'/g,"\\\\'")}')">
+      <div class="contact-avatar">${initials}</div>
       <div class="contact-info">
-        <div class="contact-name">\${c.name || c.phone}</div>
-        <div class="contact-last">\${lastMsg}</div>
+        <div class="contact-name">${c.name || c.phone}</div>
+        <div class="contact-last">${lastMsg}</div>
       </div>
-      <span class="contact-time">\${time}</span>
-    </div>`;
+      <span class="contact-time">${time}</span>
+    </div>\`;
   }).join("");
 }
 
@@ -695,10 +695,10 @@ function loadMessages(phone, silent) {
     (data.msgs || []).forEach(m => {
       const d = new Date(m.ts);
       const day = d.toLocaleDateString("en-IN", {day:"numeric",month:"short",year:"numeric"});
-      if(day !== lastDay) { html += `<div class="msg-day"><span>\${day}</span></div>`; lastDay = day; }
+      if(day !== lastDay) { html += \`<div class="msg-day"><span>${day}</span></div>\`; lastDay = day; }
       const time = d.toLocaleTimeString("en-IN", {hour:"2-digit",minute:"2-digit"});
       const cls = m.dir === "in" ? "msg-in" : "msg-out";
-      html += `<div class="msg-bubble \${cls}">\${m.text.replace(/\\n/g,"<br>")}<div class="msg-time">\${time}</div></div>`;
+      html += \`<div class="msg-bubble ${cls}">${m.text.replace(/\\n/g,"<br>")}<div class="msg-time">${time}</div></div>\`;
     });
     
     el.innerHTML = html + '<div style="clear:both"></div>';
@@ -805,10 +805,10 @@ app.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════╗
 ║   WhatsApp Auto-Reply + Live Chat Dashboard   ║
-║   🟢 Server running on port \${PORT}              ║
-║   📋 \${Object.keys(customers).length} customers in database            ║
-║   💬 \${Object.keys(messages).length} conversations stored             ║
-║   🛡️ Max \${MAX_REPLIES_PER_MINUTE} replies/minute                  ║
+║   🟢 Server running on port ${PORT}              ║
+║   📋 ${Object.keys(customers).length} customers in database            ║
+║   💬 ${Object.keys(messages).length} conversations stored             ║
+║   🛡️ Max ${MAX_REPLIES_PER_MINUTE} replies/minute                  ║
 ║   🌐 Dashboard: /chat                        ║
 ╚═══════════════════════════════════════════════╝
   `);
