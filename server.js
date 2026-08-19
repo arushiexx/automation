@@ -272,24 +272,40 @@ app.get("/privacy-policy", (req, res) => {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Privacy Policy - Automation</title>
       <style>
-        body { font-family: sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
-        h1 { color: #333; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.7; color: #333; }
+        h1 { color: #1a73e8; border-bottom: 2px solid #e8eaed; padding-bottom: 10px; }
+        h2 { color: #202124; margin-top: 25px; }
+        p { margin-bottom: 15px; }
+        .footer { margin-top: 40px; font-size: 0.9em; color: #70757a; border-top: 1px solid #e8eaed; padding-top: 15px; }
       </style>
     </head>
     <body>
       <h1>Privacy Policy</h1>
-      <p>Last updated: August 19, 2026</p>
-      <p>This Privacy Policy describes how your personal information is collected, used, and shared when you interact with our WhatsApp Auto-Reply service.</p>
-      <h2>Information We Collect</h2>
-      <p>When you send a message to our WhatsApp service, we collect your phone number, profile name, and the text of your message to automatically reply to your queries.</p>
-      <h2>How We Use Your Information</h2>
-      <p>We use the information we collect solely to provide automated responses and rate card details requested by you.</p>
-      <h2>Data Retention</h2>
-      <p>We store phone numbers strictly for rate-limiting and preventing duplicate spam responses.</p>
-      <h2>Contact Us</h2>
-      <p>If you have any questions about this Privacy Policy, please contact us at arushiexx@gmail.com.</p>
+      <p><strong>Effective Date:</strong> August 19, 2026</p>
+      
+      <p>Welcome to <strong>Automation</strong>. Your privacy is critically important to us. This Privacy Policy document outlines the types of information that is collected and recorded by Automation and how we use it.</p>
+      
+      <h2>1. Information We Collect</h2>
+      <p>We do not collect, harvest, store, or sell any personal data from users interacting with our services. All communications are processed strictly in real-time to facilitate automated customer support inquiries.</p>
+      
+      <h2>2. Use of Data</h2>
+      <p>Any transient message information received is utilized solely to deliver automated response messages requested by the user. No personal identification information, phone numbers, or conversation logs are retained or shared with third parties.</p>
+
+      <h2>3. Third-Party Services</h2>
+      <p>Our service integrates with official Meta WhatsApp Business Platform APIs. Data processing complies strictly with Meta Developer Data Policies and General Data Protection Regulation (GDPR) standards.</p>
+
+      <h2>4. Data Security</h2>
+      <p>We implement enterprise-grade security measures to safeguard communication channels against unauthorized access, alteration, or disclosure.</p>
+
+      <h2>5. Contact Us</h2>
+      <p>If you have additional questions or require more information about our Privacy Policy, do not hesitate to contact us at <strong>arushiexx@gmail.com</strong>.</p>
+
+      <div class="footer">
+        &copy; 2026 Automation. All rights reserved.
+      </div>
     </body>
     </html>
   `);
