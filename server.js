@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 // Auto-reply message (newlines supported with \n)
 const AUTO_REPLY_MESSAGE =
   process.env.AUTO_REPLY_MESSAGE ||
-  `Demo ₹39\nFree me demo nahi milega ❌\n\nMeri photo channel me upload hai jaakr dekh lo 👇\n\nJise service chahiye YES likh ke msg kare, rate list bhejungi 💕\n\n📌 Channel: https://whatsapp.com/channel/YOUR_CHANNEL_LINK`;
+  `Demo ₹39\nFree me demo nahi milega ❌\n\nMeri photo channel me upload hai jaakr dekh lo 👇\n\nJise service chahiye YES likh ke msg kare, rate list bhejungi 💕\n\n📌 Channel: https://whatsapp.com/channel/0029Vb8iWeuKGGGE9pLrhA2k`;
 
 // ---- CUSTOMER DATABASE (Simple JSON file) ----
 const DB_FILE = path.join(__dirname, "customers.json");
