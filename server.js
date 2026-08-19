@@ -359,6 +359,16 @@ app.get("/", function(req, res) {
   });
 });
 
+// CLEAR ALL DATA
+app.post("/api/clear-all", authCheck, function(req, res) {
+  for (var key in customers) delete customers[key];
+  for (var key in messages) delete messages[key];
+  saveJSON(DB_FILE, customers);
+  saveJSON(MSG_FILE, messages);
+  console.log("ALL DATA CLEARED FORCEFULLY!");
+  res.json({ success: true, message: "All customers and chats cleared!" });
+});
+
 // CHAT DASHBOARD
 app.get("/chat", function(req, res) {
   res.sendFile(path.join(__dirname, "dashboard.html"));
