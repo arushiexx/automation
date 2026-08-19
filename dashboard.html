@@ -177,6 +177,16 @@ var currentPhone="";
 var conversations=[];
 var pollInterval=null;
 
+window.addEventListener("popstate",function(e){
+if(currentPhone){
+document.getElementById("chatArea").classList.remove("active-mobile");
+document.getElementById("activeChatView").style.display="none";
+document.getElementById("emptyChat").style.display="flex";
+currentPhone="";
+renderContacts(conversations);
+}
+});
+
 function doLogin(){
 var pass=document.getElementById("loginPass").value;
 TOKEN=pass;
@@ -239,6 +249,7 @@ el.innerHTML=html;
 function filterContacts(){renderContacts(conversations);}
 
 function openChat(phone,name){
+history.pushState({chat:true},"","#chat");
 currentPhone=phone;
 document.getElementById("emptyChat").style.display="none";
 document.getElementById("activeChatView").style.display="flex";
@@ -253,6 +264,8 @@ renderContacts(conversations);
 
 function closeChat(){
 document.getElementById("chatArea").classList.remove("active-mobile");
+document.getElementById("activeChatView").style.display="none";
+document.getElementById("emptyChat").style.display="flex";
 currentPhone="";
 }
 
