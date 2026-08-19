@@ -82,11 +82,23 @@ body{font-family:'Inter',sans-serif;background:#111b21;color:#e9edef;height:100v
 .dp-preview{width:100px;height:100px;border-radius:50%;object-fit:cover;background:#2a3942;display:block;margin:8px 0}
 @media(max-width:768px){
 .sidebar{width:100%;min-width:100%}
+.msg-bubble{max-width:85%}
+.contact-name{font-size:16px}
 .chat-area{display:none}
 .chat-area.active-mobile{display:flex;position:fixed;top:0;left:0;width:100%;height:100%;z-index:50}
 .messages-area{padding:16px 12px}
 #settingsPanel{width:100%}
 }
+</style>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+<style>
+/* CROPPER MODAL */
+#cropModal { display:none; position:fixed; top:0; left:0; width:100%; height:100vh; background:rgba(0,0,0,0.9); z-index:1000; flex-direction:column; align-items:center; justify-content:center; }
+#cropModal.open { display:flex; }
+.crop-container { width:90%; max-width:500px; height:500px; max-height:70vh; background:#111b21; }
+.crop-actions { margin-top:20px; display:flex; gap:16px; }
+.crop-btn { padding:10px 24px; background:#00a884; color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer; }
+.crop-btn.cancel { background:#2a3942; }
 </style>
 </head>
 <body>
@@ -151,8 +163,8 @@ body{font-family:'Inter',sans-serif;background:#111b21;color:#e9edef;height:100v
 <div class="settings-section">
 <h4>Profile Picture</h4>
 <img id="dpPreview" class="dp-preview" src="" alt="DP">
-<input type="file" id="dpFile" accept="image/jpeg,image/png">
-<button class="settings-btn" onclick="updateDP()">Upload DP</button>
+<input type="file" id="dpFile" accept="image/jpeg,image/png" style="display:none" onchange="openCropModal(event)">
+<button class="settings-btn" onclick="triggerDPSelect()">Change DP</button>
 <div class="status-msg" id="dpStatus"></div>
 </div>
 <div class="settings-section">
@@ -376,6 +388,47 @@ var el=document.getElementById(id);
 el.textContent=msg;
 el.className="status-msg "+type;
 setTimeout(function(){el.className="status-msg"},4000);
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script>
+let cropper = null;
+function triggerDPSelect() { document.getElementById("dpFile").click(); }
+function openCropModal(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  document.getElementById("cropImage").src = url;
+  document.getElementById("cropModal").classList.add("open");
+  if(cropper) cropper.destroy();
+  cropper = new Cropper(document.getElementById("cropImage"), {
+    aspectRatio: 1,
+    viewMode: 1,
+    dragMode: "move",
+    background: false
+  });
+}
+function closeCropModal() {
+  document.getElementById("cropModal").classList.remove("open");
+  document.getElementById("dpFile").value = "";
+  if(cropper) { cropper.destroy(); cropper = null; }
+}
+function applyCrop() {
+  if(!cropper) return;
+  cropper.getCroppedCanvas({width: 500, height: 500}).toBlob(blob => {
+    closeCropModal();
+    uploadCroppedDP(blob);
+  }, "image/jpeg", 0.9);
+}
+function uploadCroppedDP(blob) {
+  const fd = new FormData();
+  fd.append("photo", blob, "dp.jpg");
+  showStatus("dpStatus","Uploading...","success");
+  api("/api/profile/picture",{method:"POST",body:fd})
+  .then(function(r){return r.json()}).then(function(data){
+  if(data.success){showStatus("dpStatus","DP Updated!","success");loadProfile();}
+  else showStatus("dpStatus",data.error||"Failed","error");
+  }).catch(function(){showStatus("dpStatus","Upload failed","error");});
 }
 </script>
 </body>

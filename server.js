@@ -18,7 +18,9 @@ const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "9569";
 const APP_ID = process.env.APP_ID || "1529253259236329";
 const PORT = process.env.PORT || 3000;
 
-var AUTO_REPLY_MESSAGE = process.env.AUTO_REPLY_MESSAGE ||
+var SETTINGS_FILE = path.join(__dirname, "settings.json");
+var settings = loadJSON(SETTINGS_FILE);
+var AUTO_REPLY_MESSAGE = settings.AUTO_REPLY_MESSAGE || process.env.AUTO_REPLY_MESSAGE ||
   "Demo Rs.39\nFree me demo nahi milega\n\nMeri photo channel me upload hai jaakr dekh lo\n\nJise service chahiye YES likh ke msg kare, rate list bhejungi\n\nChannel: https://whatsapp.com/channel/0029Vb8iWeuKGGGE9pLrhA2k";
 
 var DB_FILE = path.join(__dirname, "customers.json");
@@ -57,8 +59,13 @@ function storeMessage(phone, name, text, direction) {
     dir: direction,
     ts: new Date().toISOString()
   });
-  if (messages[phone].msgs.length > 200) {
-    messages[phone].msgs = messages[phone].msgs.slice(-200);
+  // Keep messages from last 5 days
+  var fiveDaysAgo = new Date();
+  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+  messages[phone].msgs = messages[phone].msgs.filter(m => new Date(m.ts) >= fiveDaysAgo);
+  // Max 500 messages per user to be safe
+  if (messages[phone].msgs.length > 500) {
+    messages[phone].msgs = messages[phone].msgs.slice(-500);
   }
   saveJSON(MSG_FILE, messages);
 }
@@ -241,6 +248,8 @@ app.post("/api/auto-reply", authCheck, function(req, res) {
   var message = req.body.message;
   if (!message) return res.status(400).json({ error: "message required" });
   AUTO_REPLY_MESSAGE = message;
+  settings.AUTO_REPLY_MESSAGE = message;
+  saveJSON(SETTINGS_FILE, settings);
   res.json({ success: true, newMessage: message });
 });
 
