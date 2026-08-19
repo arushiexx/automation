@@ -1,17 +1,22 @@
 {
-  "name": "whatsapp-auto-reply-bot",
+  "name": "whatsapp-auto-reply",
   "version": "1.0.0",
-  "description": "WhatsApp Web QR-Based Auto-Reply System",
+  "description": "",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
-    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "axios": "^1.19.0",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "pino": "^9.6.0",
-    "qrcode": "^1.5.4"
+    "express": "^5.2.1"
   }
 }
