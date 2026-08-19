@@ -229,7 +229,7 @@ body { font-family:'Inter',sans-serif; background:#111b21; color:#e9edef; height
   <div class="settings-section">
     <h4>🤖 Auto-Reply Message</h4>
     <textarea id="autoReplyMsg" placeholder="Auto reply message..."></textarea>
-    <p style="font-size:12px;color:#8696a0;margin-top:4px">Use \\n for new line</p>
+    <p style="font-size:12px;color:#8696a0;margin-top:4px">Use \n for new line</p>
     <button class="settings-btn" onclick="updateAutoReply()">Save Auto-Reply</button>
     <div class="status-msg" id="arStatus"></div>
   </div>
@@ -289,7 +289,7 @@ function renderContacts(data) {
     const time = c.lastTime ? new Date(c.lastTime).toLocaleTimeString("en-IN", {hour:"2-digit",minute:"2-digit"}) : "";
     const active = c.phone === currentPhone ? "active" : "";
     const lastMsg = c.lastMessage.length > 40 ? c.lastMessage.substring(0,40) + "..." : c.lastMessage;
-    return `<div class="contact-item ${active}" onclick="openChat('${c.phone}','${(c.name||"").replace(/'/g,"\\\\'")}')">
+    return `<div class="contact-item ${active}" onclick="openChat('${c.phone}','${(c.name||"").replace(/'/g,"\\'")}')">
       <div class="contact-avatar">${initials}</div>
       <div class="contact-info">
         <div class="contact-name">${c.name || c.phone}</div>
@@ -337,7 +337,7 @@ function loadMessages(phone, silent) {
       if(day !== lastDay) { html += `<div class="msg-day"><span>${day}</span></div>`; lastDay = day; }
       const time = d.toLocaleTimeString("en-IN", {hour:"2-digit",minute:"2-digit"});
       const cls = m.dir === "in" ? "msg-in" : "msg-out";
-      html += `<div class="msg-bubble ${cls}">${m.text.replace(/\\n/g,"<br>")}<div class="msg-time">${time}</div></div>`;
+      html += `<div class="msg-bubble ${cls}">${m.text.replace(/\n/g,"<br>")}<div class="msg-time">${time}</div></div>`;
     });
     
     el.innerHTML = html + '<div style="clear:both"></div>';
