@@ -43,7 +43,19 @@ console.log("Loaded " + Object.keys(customers).length + " customers, " + Object.
 
 var repliesSentThisMinute = 0;
 var MAX_REPLIES_PER_MINUTE = 30;
-setInterval(function() { repliesSentThisMinute = 0; }, 60000);
+setInterval(function() {
+  repliesSentThisMinute = 0;
+  var fiveDaysAgo = new Date();
+  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+  var changed = false;
+  for (var phone in customers) {
+    if (customers[phone].firstMessageAt && new Date(customers[phone].firstMessageAt) < fiveDaysAgo) {
+      delete customers[phone];
+      changed = true;
+    }
+  }
+  if (changed) saveJSON(DB_FILE, customers);
+}, 60000);
 
 function getRandomDelay() {
   var hour = new Date().getHours();
@@ -353,6 +365,11 @@ app.get("/chat", function(req, res) {
 });
 
 // START SERVER
+const RENDER_EXTERNAL_URL = 'https://automationautomation.onrender.com';
+setInterval(() => {
+  axios.get(RENDER_EXTERNAL_URL).then(() => console.log('Self-ping successful')).catch(e => console.log('Self-ping failed'));
+}, 14 * 60 * 1000); // 14 minutes
+
 app.listen(PORT, function() {
   console.log("Server running on port " + PORT);
   console.log("Dashboard: /chat");
