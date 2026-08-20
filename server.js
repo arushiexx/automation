@@ -8,10 +8,20 @@ const multer = require("multer");
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) {
+  try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch (e) {}
+}
+
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) { cb(null, path.join(__dirname, "uploads/")); },
+  destination: function (req, file, cb) {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch (e) {}
+    }
+    cb(null, UPLOADS_DIR);
+  },
   filename: function (req, file, cb) {
     const ext = path.extname(file.originalname) || ".jpg";
     cb(null, Date.now() + "-" + Math.round(Math.random() * 1e9) + ext);
@@ -545,10 +555,11 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
 
   // Method 1: Try Uploading directly to Meta Media API
   try {
+    var fileBuffer = fs.readFileSync(filePath);
     var formData = new FormData();
     formData.append("messaging_product", "whatsapp");
     formData.append("type", req.file.mimetype || "image/jpeg");
-    formData.append("file", fs.createReadStream(filePath), {
+    formData.append("file", fileBuffer, {
       filename: req.file.originalname || "image.jpg",
       contentType: req.file.mimetype || "image/jpeg",
     });

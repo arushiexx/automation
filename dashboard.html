@@ -413,14 +413,17 @@ var input = document.getElementById("msgInput");
 var oldPlaceholder = input.placeholder;
 input.placeholder = "Sending image...";
 api("/api/send-media", { method: "POST", body: fd })
-.then(function(r){return r.json()})
+.then(function(r){
+  if (!r.ok) return r.json().then(function(err){ throw new Error(err.error || "Failed to send image"); });
+  return r.json();
+})
 .then(function(){
   input.placeholder = oldPlaceholder;
   loadMessages(currentPhone);
   setTimeout(function(){loadConversations()},500);
-}).catch(function(){
+}).catch(function(err){
   input.placeholder = oldPlaceholder;
-  alert("Failed to send image");
+  alert("Image Send Error: " + (err.message || "Failed to send image"));
 });
 }
 
