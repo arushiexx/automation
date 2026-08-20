@@ -621,6 +621,15 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
       });
 
       storeMessage(phone, "You", "[OUT_IMAGE_MEDIA:" + mediaId + "]", "out");
+
+      // INSTANTLY delete temp file from server disk (100% Stateless — 0 Bytes stored on server!)
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log("⚡ Instantly deleted temp upload file. Server is 100% Stateless!");
+        } catch(e) {}
+      }
+
       return res.json({ success: true, mediaId: mediaId });
     }
   } catch (err1) {
@@ -653,6 +662,13 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
   } catch (err2) {
     console.error("Image Send Error:", err2.response ? err2.response.data : err2.message);
     res.status(500).json({ error: (err2.response && err2.response.data && err2.response.data.error && err2.response.data.error.message) || err2.message });
+  } finally {
+    // Immediate cleanup fallback (3s)
+    setTimeout(function() {
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); console.log("⚡ Cleaned temp file fallback"); } catch(e) {}
+      }
+    }, 3000);
   }
 });
 
