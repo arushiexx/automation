@@ -407,6 +407,35 @@ app.delete("/api/customer/:phone", authCheck, function(req, res) {
   res.json({ success: true, message: "Cleared history for " + phone });
 });
 
+// EXPIRE A MEDIA MESSAGE (VIEW-ONCE FEATURE)
+app.post("/api/expire-message", authCheck, function(req, res) {
+  var phone = req.body.phone;
+  var msgId = req.body.msgId;
+  var mediaId = req.body.mediaId;
+
+  if (!phone || (!msgId && !mediaId) || !messages[phone] || !messages[phone].msgs) {
+    return res.status(400).json({ error: "Invalid parameters" });
+  }
+
+  var msgs = messages[phone].msgs;
+  var updated = false;
+  for (var i = 0; i < msgs.length; i++) {
+    if ((msgId && msgs[i].id === msgId) || (mediaId && msgs[i].text.includes(mediaId))) {
+      msgs[i].text = "[EXPIRED_IMAGE]";
+      updated = true;
+      break;
+    }
+  }
+
+  if (updated) {
+    saveJSON(MSG_FILE, messages);
+    console.log("🔒 Expired media message for " + phone);
+    res.json({ success: true, message: "Photo expired" });
+  } else {
+    res.json({ success: false, message: "Already expired or not found" });
+  }
+});
+
 // UPDATE AUTO-REPLY MESSAGE
 app.post("/api/auto-reply", authCheck, function(req, res) {
   var message = req.body.message;

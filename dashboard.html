@@ -368,15 +368,21 @@ if (m.dir === "out") {
 }
 
 var content = m.text.replace(/\n/g,"<br>");
-if (m.text.startsWith("[IMAGE:")) {
+if (m.text === "[EXPIRED_IMAGE]") {
+  content = '<div style="padding:6px 10px; background:rgba(255,255,255,0.06); border-radius:6px; color:#8696a0; font-size:12px; display:inline-flex; align-items:center; gap:6px;">' +
+              '<span style="font-size:14px;">🔒</span>' +
+              '<span>Photo Viewed (Expired)</span>' +
+            '</div>';
+} else if (m.text.startsWith("[IMAGE:")) {
   var mediaId = m.text.substring(7, m.text.length-1);
   var mediaSrc = '/api/media/' + mediaId + '?token=' + TOKEN;
-  content = '<div class="media-blur-box" onclick="revealMedia(this)" style="position:relative;overflow:hidden;border-radius:8px;margin-bottom:4px;cursor:pointer;max-width:260px;">' +
+  var safeMsgId = (m.id || '').replace(/'/g, "\\'");
+  content = '<div class="media-blur-box" onclick="revealMedia(this, \'' + phone + '\', \'' + safeMsgId + '\', \'' + mediaId + '\')" style="position:relative;overflow:hidden;border-radius:8px;margin-bottom:4px;cursor:pointer;max-width:260px;">' +
               '<img src="' + mediaSrc + '" class="media-img" style="filter:blur(22px);transition:filter 0.3s ease;width:100%;display:block;pointer-events:none;">' +
               '<div class="media-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);color:#fff;font-size:12px;text-align:center;padding:8px;">' +
                 '<span style="font-size:22px;margin-bottom:2px;">👁️</span>' +
                 '<span style="font-weight:600;">Click to Reveal Image</span>' +
-                '<span style="font-size:10px;opacity:0.75;margin-top:2px;">Auto-blurs in 1 min</span>' +
+                '<span style="font-size:10px;opacity:0.75;margin-top:2px;">Expires 1 min after view</span>' +
               '</div>' +
             '</div>';
 } else if (m.text.startsWith("[OUT_IMAGE_MEDIA:")) {
@@ -474,24 +480,30 @@ loadConversations();
 });
 }
 
-function revealMedia(box) {
+function revealMedia(box, phone, msgId, mediaId) {
   var img = box.querySelector(".media-img");
   var overlay = box.querySelector(".media-overlay");
   if (!img) return;
 
   if (img.style.filter === "none") {
-    img.style.filter = "blur(22px)";
-    if (overlay) overlay.style.display = "flex";
-  } else {
-    img.style.filter = "none";
-    if (overlay) overlay.style.display = "none";
-
-    if (box.blurTimer) clearTimeout(box.blurTimer);
-    box.blurTimer = setTimeout(function() {
-      img.style.filter = "blur(22px)";
-      if (overlay) overlay.style.display = "flex";
-    }, 60 * 1000);
+    return; // Already un-blurred
   }
+
+  img.style.filter = "none";
+  if (overlay) overlay.style.display = "none";
+
+  if (box.blurTimer) clearTimeout(box.blurTimer);
+  box.blurTimer = setTimeout(function() {
+    if (phone && (msgId || mediaId)) {
+      api("/api/expire-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phone, msgId: msgId, mediaId: mediaId })
+      }).then(function() {
+        loadMessages(phone, true);
+      });
+    }
+  }, 60 * 1000);
 }
 
 // SETTINGS
