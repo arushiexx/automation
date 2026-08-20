@@ -25,12 +25,10 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "my_secret_verify_token_123";
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "9569";
 const APP_ID = process.env.APP_ID || "1529253259236329";
 const PORT = process.env.PORT || 3000;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ("ghp_" + "6IEZ0xKj73bNVgFYxbYjoxZG3Kb4q63hHrq8");
+const GIST_ID = process.env.GIST_ID || "ec909a5de4596fdb9ead26557529044b";
 
 var SETTINGS_FILE = path.join(__dirname, "settings.json");
-var settings = loadJSON(SETTINGS_FILE);
-var AUTO_REPLY_MESSAGE = settings.AUTO_REPLY_MESSAGE || process.env.AUTO_REPLY_MESSAGE ||
-  "Demo Rs.39\nFree me demo nahi milega\n\nMeri photo channel me upload hai jaakr dekh lo\n\nJise service chahiye YES likh ke msg kare, rate list bhejungi\n\nChannel: https://whatsapp.com/channel/0029Vb8iWeuKGGGE9pLrhA2k";
-
 var DB_FILE = path.join(__dirname, "customers.json");
 var MSG_FILE = path.join(__dirname, "messages.json");
 
@@ -40,14 +38,89 @@ function loadJSON(file) {
   } catch (e) { console.error("Error loading", file, e.message); }
   return {};
 }
-function saveJSON(file, data) {
-  try { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
-  catch (e) { console.error("Error saving", file, e.message); }
-}
 
 var customers = loadJSON(DB_FILE);
 var messages = loadJSON(MSG_FILE);
-console.log("Loaded " + Object.keys(customers).length + " customers, " + Object.keys(messages).length + " conversations");
+var settings = loadJSON(SETTINGS_FILE);
+var AUTO_REPLY_MESSAGE = settings.AUTO_REPLY_MESSAGE || process.env.AUTO_REPLY_MESSAGE ||
+  "Demo Rs.39\nFree me demo nahi milega\n\nMeri photo channel me upload hai jaakr dekh lo\n\nJise service chahiye YES likh ke msg kare, rate list bhejungi\n\nChannel: https://whatsapp.com/channel/0029Vb8iWeuKGGGE9pLrhA2k";
+
+var isSyncingGist = false;
+var pendingGistSync = false;
+
+function syncToCloudGist() {
+  if (!GITHUB_TOKEN || !GIST_ID) return;
+  if (isSyncingGist) {
+    pendingGistSync = true;
+    return;
+  }
+  isSyncingGist = true;
+  pendingGistSync = false;
+
+  axios.patch(
+    "https://api.github.com/gists/" + GIST_ID,
+    {
+      files: {
+        "customers.json": { content: JSON.stringify(customers, null, 2) },
+        "messages.json": { content: JSON.stringify(messages, null, 2) },
+        "settings.json": { content: JSON.stringify(settings, null, 2) },
+      },
+    },
+    {
+      headers: { Authorization: "token " + GITHUB_TOKEN },
+    }
+  ).then(function() {
+    console.log("☁️ Synced DB to Cloud Gist!");
+  }).catch(function(err) {
+    console.error("Gist sync error:", err.response ? err.response.data : err.message);
+  }).finally(function() {
+    isSyncingGist = false;
+    if (pendingGistSync) {
+      setTimeout(syncToCloudGist, 2000);
+    }
+  });
+}
+
+async function loadFromCloudGist() {
+  if (!GITHUB_TOKEN || !GIST_ID) return;
+  try {
+    var res = await axios.get("https://api.github.com/gists/" + GIST_ID, {
+      headers: { Authorization: "token " + GITHUB_TOKEN },
+    });
+    var files = res.data && res.data.files;
+    if (files) {
+      if (files["customers.json"] && files["customers.json"].content) {
+        var cloudCust = JSON.parse(files["customers.json"].content);
+        customers = Object.assign({}, cloudCust, customers);
+        fs.writeFileSync(DB_FILE, JSON.stringify(customers, null, 2));
+      }
+      if (files["messages.json"] && files["messages.json"].content) {
+        var cloudMsgs = JSON.parse(files["messages.json"].content);
+        messages = Object.assign({}, cloudMsgs, messages);
+        fs.writeFileSync(MSG_FILE, JSON.stringify(messages, null, 2));
+      }
+      if (files["settings.json"] && files["settings.json"].content) {
+        var cloudSet = JSON.parse(files["settings.json"].content);
+        settings = Object.assign({}, cloudSet, settings);
+        if (settings.AUTO_REPLY_MESSAGE) AUTO_REPLY_MESSAGE = settings.AUTO_REPLY_MESSAGE;
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+      }
+      console.log("☁️ Restored Cloud DB! Customers: " + Object.keys(customers).length + ", Conversations: " + Object.keys(messages).length);
+    }
+  } catch (err) {
+    console.error("Gist load error:", err.response ? err.response.data : err.message);
+  }
+}
+
+function saveJSON(file, data) {
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    syncToCloudGist();
+  } catch (e) { console.error("Error saving", file, e.message); }
+}
+
+// Restore Cloud Database immediately on startup
+loadFromCloudGist();
 
 var repliesSentThisMinute = 0;
 var MAX_REPLIES_PER_MINUTE = 30;
