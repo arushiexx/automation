@@ -481,6 +481,12 @@ if (m.text === "[DELETED_FOR_EVERYONE]") {
   } else {
     content = '<div style="padding:6px 12px; background:rgba(0,168,132,0.2); border-radius:8px; color:#00a884; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;"><span>1️⃣</span> <span>View Once Photo/Video (Sent)</span></div>';
   }
+} else if (m.text.startsWith("[OUT_VIDEO_MEDIA:")) {
+  var mediaId = m.text.substring(17, m.text.length-1);
+  content = '<video src="/api/media/' + mediaId + '?token=' + TOKEN + '" controls style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block"></video>';
+} else if (m.text.startsWith("[OUT_VIDEO:")) {
+  var url = m.text.substring(11, m.text.length-1);
+  content = '<video src="' + url + '" controls style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block"></video>';
 } else if (m.text.startsWith("[OUT_IMAGE_MEDIA:")) {
   var mediaId = m.text.substring(17, m.text.length-1);
   content = '<img src="/api/media/' + mediaId + '?token=' + TOKEN + '" style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block">';
