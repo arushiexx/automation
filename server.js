@@ -55,7 +55,7 @@ var messages = loadJSON(MSG_FILE);
 var settings = loadJSON(SETTINGS_FILE);
 var blockedContacts = loadJSON(BLOCKED_FILE);
 var AUTO_REPLY_MESSAGE = settings.AUTO_REPLY_MESSAGE || process.env.AUTO_REPLY_MESSAGE ||
-  "Demo Rs.39\nFree me demo nahi milega\n\nMeri photo channel me upload hai jaakr dekh lo\n\nJise service chahiye YES likh ke msg kare, rate list bhejungi\n\nChannel: https://whatsapp.com/channel/0029Vb8iWeuKGGGE9pLrhA2k";
+  "Hello! Welcome to Janhvi Store. Thanks for reaching out! How can we assist you today?";
 
 var isSyncingGist = false;
 var pendingGistSync = false;
