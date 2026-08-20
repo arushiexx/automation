@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
 <title>WhatsApp Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
@@ -145,7 +145,7 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
 
 <!-- SCREEN 2: CHAT -->
 <div id="chatScreen">
-<div id="chatContent" style="display:none;flex-direction:column;height:100%">
+<div id="chatContent" style="display:none;flex-direction:column;height:100%;position:relative;">
 <div class="chat-hdr">
 <button class="back-btn" onclick="goBackToLobby()">&#8592;</button>
 <div class="ch-avatar" id="chatAvatar">?</div>
@@ -154,8 +154,10 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
 <div class="ch-phone" id="chatPhone">+91...</div>
 </div>
 <button class="del-btn" onclick="deleteChat()" title="Delete">&#128465;</button>
+</div>
+<div class="messages-area" id="messagesArea"></div>
 <!-- REPLY PREVIEW BAR -->
-<div id="replyPreviewBar" style="display:none; padding:8px 12px; background:#1f2c34; border-left:4px solid #00a884; border-radius:6px; margin:4px 8px 0 8px; position:relative;">
+<div id="replyPreviewBar" style="display:none; padding:8px 12px; background:#1f2c34; border-left:4px solid #00a884; border-radius:6px; margin:4px 8px 0 8px; position:relative; flex-shrink:0;">
   <div style="display:flex; justify-content:space-between; align-items:center;">
     <span style="color:#00a884; font-size:12px; font-weight:600;" id="replySender">Replying to Customer</span>
     <button onclick="cancelReply()" style="background:none; border:none; color:#8696a0; font-size:16px; cursor:pointer; padding:0 4px;">✕</button>
