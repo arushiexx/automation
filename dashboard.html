@@ -154,8 +154,14 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
 <div class="ch-phone" id="chatPhone">+91...</div>
 </div>
 <button class="del-btn" onclick="deleteChat()" title="Delete">&#128465;</button>
+<!-- REPLY PREVIEW BAR -->
+<div id="replyPreviewBar" style="display:none; padding:8px 12px; background:#1f2c34; border-left:4px solid #00a884; border-radius:6px; margin:4px 8px 0 8px; position:relative;">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <span style="color:#00a884; font-size:12px; font-weight:600;" id="replySender">Replying to Customer</span>
+    <button onclick="cancelReply()" style="background:none; border:none; color:#8696a0; font-size:16px; cursor:pointer; padding:0 4px;">✕</button>
+  </div>
+  <div id="replyPreviewText" style="color:#8696a0; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">Quoted message</div>
 </div>
-<div class="messages-area" id="messagesArea"></div>
 <div class="input-bar">
 <button class="attach-btn" onclick="document.getElementById('mediaFile').click()">&#128206;</button>
 <input type="file" id="mediaFile" accept="image/*" style="display:none" onchange="sendMedia(event)">
@@ -328,6 +334,7 @@ var wasAtBottom=el.scrollHeight-el.scrollTop-el.clientHeight<100;
 var html="";
 var lastDay="";
 var msgs=data.msgs||[];
+var contactName = data.name || "Customer";
 for(var i=0;i<msgs.length;i++){
 var m=msgs[i];
 var d=new Date(m.ts);
@@ -335,6 +342,29 @@ var day=d.toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"
 if(day!==lastDay){html+='<div class="msg-day"><span>'+day+'</span></div>';lastDay=day;}
 var time=d.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
 var cls=m.dir==="in"?"msg-in":"msg-out";
+var senderName = m.dir==="in" ? contactName : "You";
+
+var quotedHtml = "";
+if (m.quoted && (m.quoted.text || m.quoted.name)) {
+  var qName = (m.quoted.name || "User").replace(/'/g, "\\'");
+  var qText = (m.quoted.text || "").replace(/'/g, "\\'");
+  quotedHtml = '<div style="border-left:3px solid #00a884; background:rgba(0,0,0,0.25); padding:4px 8px; border-radius:4px; margin-bottom:4px; font-size:12px; cursor:pointer;" onclick="setReplyTarget(\'' + qName + '\', \'' + qText + '\', \'\')">' +
+                 '<div style="color:#00a884; font-weight:600; font-size:11px;">' + (m.quoted.name || 'Quoted') + '</div>' +
+                 '<div style="color:#8696a0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (m.quoted.text || '') + '</div>' +
+               '</div>';
+}
+
+var statusTick = "";
+if (m.dir === "out") {
+  if (m.status === "read") {
+    statusTick = '<span style="color:#53bdeb; margin-left:4px; font-weight:bold; font-size:12px;" title="Read">✓✓</span>';
+  } else if (m.status === "delivered") {
+    statusTick = '<span style="color:#8696a0; margin-left:4px; font-weight:bold; font-size:12px;" title="Delivered">✓✓</span>';
+  } else {
+    statusTick = '<span style="color:#8696a0; margin-left:4px; font-weight:bold; font-size:12px;" title="Sent">✓</span>';
+  }
+}
+
 var content = m.text.replace(/\n/g,"<br>");
 if (m.text.startsWith("[IMAGE:")) {
   var mediaId = m.text.substring(7, m.text.length-1);
@@ -354,7 +384,16 @@ if (m.text.startsWith("[IMAGE:")) {
   var url = m.text.substring(11, m.text.length-1);
   content = '<img src="' + url + '" style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block">';
 }
-html+='<div class="msg-bubble '+cls+'">'+content+'<div class="msg-time">'+time+'</div></div>';
+
+var cleanText = m.text.startsWith("[IMAGE:") ? "Photo" : m.text.replace(/'/g, "\\'").replace(/\n/g, " ");
+var safeSender = senderName.replace(/'/g, "\\'");
+
+html+='<div class="msg-bubble '+cls+'" ondblclick="setReplyTarget(\'' + safeSender + '\', \'' + cleanText + '\', \'' + (m.id || '') + '\')">' +
+        quotedHtml + content +
+        '<div class="msg-time">' + time + statusTick +
+          '<span onclick="event.stopPropagation(); setReplyTarget(\'' + safeSender + '\', \'' + cleanText + '\', \'' + (m.id || '') + '\')" style="margin-left:6px; cursor:pointer; font-size:12px; opacity:0.6;" title="Reply">↩</span>' +
+        '</div>' +
+      '</div>';
 }
 el.innerHTML=html+'<div style="clear:both"></div>';
 if(!silent||wasAtBottom)el.scrollTop=el.scrollHeight;
@@ -383,15 +422,38 @@ api("/api/send-media", { method: "POST", body: fd })
 });
 }
 
+var currentReply = null;
+
+function setReplyTarget(name, text, msgId) {
+  currentReply = { name: name, text: text, msgId: msgId };
+  document.getElementById("replySender").textContent = "Replying to " + name;
+  document.getElementById("replyPreviewText").textContent = text.length > 50 ? text.substring(0, 50) + "..." : text;
+  document.getElementById("replyPreviewBar").style.display = "block";
+  document.getElementById("msgInput").focus();
+}
+
+function cancelReply() {
+  currentReply = null;
+  document.getElementById("replyPreviewBar").style.display = "none";
+}
+
 function sendMsg(){
 var input=document.getElementById("msgInput");
 var msg=input.value.trim();
 if(!msg||!currentPhone)return;
+
+var payload = { phone: currentPhone, message: msg };
+if (currentReply) {
+  payload.quoted = currentReply;
+}
+
 input.value="";
+cancelReply();
+
 api("/api/send",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
-body:JSON.stringify({phone:currentPhone,message:msg})
+body:JSON.stringify(payload)
 }).then(function(r){return r.json()}).then(function(){
 loadMessages(currentPhone);
 setTimeout(function(){loadConversations()},500);

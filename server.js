@@ -144,43 +144,60 @@ function getRandomDelay() {
   return Math.floor(Math.random() * 10000) + 5000;
 }
 
-function storeMessage(phone, name, text, direction) {
+function storeMessage(phone, name, text, direction, msgId, status, quoted) {
   if (!messages[phone]) messages[phone] = { name: name || "Unknown", msgs: [] };
   if (name && name !== "Unknown") messages[phone].name = name;
-  messages[phone].msgs.push({
+
+  var newMsg = {
+    id: msgId || ("local_" + Date.now() + "_" + Math.floor(Math.random() * 1000)),
     text: text,
     dir: direction,
+    status: status || (direction === "out" ? "sent" : "read"),
     ts: new Date().toISOString()
-  });
+  };
+  if (quoted && (quoted.text || quoted.name)) {
+    newMsg.quoted = {
+      name: quoted.name || "User",
+      text: quoted.text || ""
+    };
+  }
+
+  messages[phone].msgs.push(newMsg);
+
   // Keep messages from last 5 days
   var fiveDaysAgo = new Date();
   fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
   messages[phone].msgs = messages[phone].msgs.filter(m => new Date(m.ts) >= fiveDaysAgo);
-  // Max 500 messages per user to be safe
   if (messages[phone].msgs.length > 500) {
     messages[phone].msgs = messages[phone].msgs.slice(-500);
   }
   saveJSON(MSG_FILE, messages);
 }
 
-async function sendWhatsAppMessage(to, message) {
+async function sendWhatsAppMessage(to, message, contextMsgId) {
   try {
-    await axios({
+    var payload = {
+      messaging_product: "whatsapp",
+      to: to,
+      type: "text",
+      text: { body: message }
+    };
+    if (contextMsgId && !contextMsgId.startsWith("local_")) {
+      payload.context = { message_id: contextMsgId };
+    }
+
+    var response = await axios({
       method: "POST",
       url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
       headers: {
         Authorization: "Bearer " + WHATSAPP_TOKEN,
         "Content-Type": "application/json",
       },
-      data: {
-        messaging_product: "whatsapp",
-        to: to,
-        type: "text",
-        text: { body: message },
-      },
+      data: payload,
     });
     console.log("Reply sent to " + to);
-    return true;
+    var sentMsgId = response.data && response.data.messages && response.data.messages[0] && response.data.messages[0].id;
+    return sentMsgId || true;
   } catch (error) {
     console.error("Failed to send to " + to + ":", error.response ? error.response.data : error.message);
     return false;
@@ -211,14 +228,48 @@ app.get("/webhook", function(req, res) {
   }
 });
 
-// RECEIVE MESSAGES
+// RECEIVE MESSAGES & STATUSES
 app.post("/webhook", async function(req, res) {
   res.sendStatus(200);
   try {
     var body = req.body;
-    if (!body.object || !body.entry || !body.entry[0] || !body.entry[0].changes || !body.entry[0].changes[0] || !body.entry[0].changes[0].value || !body.entry[0].changes[0].value.messages) return;
+    if (!body.object || !body.entry || !body.entry[0] || !body.entry[0].changes || !body.entry[0].changes[0] || !body.entry[0].changes[0].value) return;
 
     var value = body.entry[0].changes[0].value;
+
+    // 1. Handle Status updates (sent, delivered, read)
+    if (value.statuses && value.statuses.length > 0) {
+      for (var s = 0; s < value.statuses.length; s++) {
+        var st = value.statuses[s];
+        var statusVal = st.status; // "sent" | "delivered" | "read"
+        var recipientPhone = st.recipient_id;
+        var msgId = st.id;
+
+        if (messages[recipientPhone] && messages[recipientPhone].msgs) {
+          var found = false;
+          for (var m = messages[recipientPhone].msgs.length - 1; m >= 0; m--) {
+            var msg = messages[recipientPhone].msgs[m];
+            if (msg.id === msgId) {
+              msg.status = statusVal;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            for (var m = messages[recipientPhone].msgs.length - 1; m >= 0; m--) {
+              if (messages[recipientPhone].msgs[m].dir === "out") {
+                messages[recipientPhone].msgs[m].status = statusVal;
+                if (msgId) messages[recipientPhone].msgs[m].id = msgId;
+                break;
+              }
+            }
+          }
+          saveJSON(MSG_FILE, messages);
+        }
+      }
+    }
+
+    // 2. Handle Incoming Messages
     var msgs = value.messages;
     if (!msgs || msgs.length === 0) return;
 
@@ -233,7 +284,12 @@ app.post("/webhook", async function(req, res) {
 
       console.log("Message from " + customerName + " (" + from + "): " + msgText);
 
-      storeMessage(from, customerName, msgText, "in");
+      var contextObj = message.context ? {
+        name: customerName,
+        text: "Quoted message"
+      } : null;
+
+      storeMessage(from, customerName, msgText, "in", messageId, "read", contextObj);
       await markAsRead(messageId);
 
       if (customers[from]) {
@@ -317,12 +373,15 @@ app.get("/api/messages/:phone", authCheck, function(req, res) {
 app.post("/api/send", authCheck, async function(req, res) {
   var phone = req.body.phone;
   var message = req.body.message;
+  var quoted = req.body.quoted; // { name, text, msgId }
   if (!phone || !message) return res.status(400).json({ error: "phone and message required" });
-  var success = await sendWhatsAppMessage(phone, message);
-  if (success) {
+  var contextMsgId = quoted && quoted.msgId ? quoted.msgId : null;
+  var result = await sendWhatsAppMessage(phone, message, contextMsgId);
+  if (result) {
+    var sentId = typeof result === "string" ? result : null;
     var name = (messages[phone] && messages[phone].name) || (customers[phone] && customers[phone].name) || "Unknown";
-    storeMessage(phone, name, message, "out");
-    res.json({ success: true });
+    storeMessage(phone, name, message, "out", sentId, "sent", quoted);
+    res.json({ success: true, id: sentId });
   } else {
     res.status(500).json({ error: "Failed to send" });
   }
