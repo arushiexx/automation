@@ -110,6 +110,35 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
 .empty-state h3{font-size:22px;font-weight:300;color:#e9edef;margin-bottom:6px}
 #settingsScreen{left:360px;width:calc(100% - 360px)}
 }
+/* CONTEXT MENU */
+#contextMenu {
+  display: none;
+  position: fixed;
+  z-index: 10000;
+  background: #233138;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  padding: 6px 0;
+  min-width: 190px;
+  border: 1px solid #2a3942;
+}
+.menu-item {
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #e9edef;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+.menu-item:hover, .menu-item:active {
+  background: #182229;
+}
+.menu-item.danger {
+  color: #ea4335;
+}
 </style>
 </head>
 <body>
@@ -219,6 +248,11 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
 </div>
 </div>
 
+<!-- WHATSAPP WEB CONTEXT MENU -->
+<div id="contextMenu">
+  <div class="menu-item" onclick="onMenuReply()"><span style="font-size:16px;">↩️</span> Reply</div>
+  <div class="menu-item" onclick="onMenuCopy()"><span style="font-size:16px;">📋</span> Copy text</div>
+  <div class="menu-item danger" onclick="onMenuDeleteForEveryone()"><span style="font-size:16px;">🗑️</span> Delete for everyone</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
@@ -446,12 +480,13 @@ if (m.text === "[DELETED_FOR_EVERYONE]") {
 
 var cleanText = m.text.startsWith("[IMAGE:") ? "Photo" : m.text.replace(/'/g, "\\'").replace(/\n/g, " ");
 var safeSender = senderName.replace(/'/g, "\\'");
-var delBtn = (m.text !== "[DELETED_FOR_EVERYONE]") ? '<span onclick="event.stopPropagation(); deleteForEveryone(\'' + phone + '\', \'' + (m.id || '') + '\')" style="margin-left:6px; cursor:pointer; font-size:12px; opacity:0.5; color:#ea4335;" title="Delete for everyone">🗑️</span>' : '';
+var safeMsgId = (m.id || '').replace(/'/g, "\\'");
+var delBtn = (m.text !== "[DELETED_FOR_EVERYONE]") ? '<span onclick="event.stopPropagation(); deleteForEveryone(\'' + phone + '\', \'' + safeMsgId + '\')" style="margin-left:6px; cursor:pointer; font-size:12px; opacity:0.5; color:#ea4335;" title="Delete for everyone">🗑️</span>' : '';
 
-html+='<div class="msg-bubble '+cls+'" ondblclick="setReplyTarget(\'' + safeSender + '\', \'' + cleanText + '\', \'' + (m.id || '') + '\')">' +
+html+='<div class="msg-bubble '+cls+'" ondblclick="setReplyTarget(\'' + safeSender + '\', \'' + cleanText + '\', \'' + safeMsgId + '\')" oncontextmenu="openContextMenu(event, \'' + phone + '\', \'' + safeMsgId + '\', \'' + cleanText + '\', \'' + safeSender + '\')" ontouchstart="handleTouchStart(event, \'' + phone + '\', \'' + safeMsgId + '\', \'' + cleanText + '\', \'' + safeSender + '\')" ontouchend="handleTouchEnd()" ontouchmove="handleTouchEnd()">' +
         quotedHtml + content +
         '<div class="msg-time">' + time + statusTick +
-          '<span onclick="event.stopPropagation(); setReplyTarget(\'' + safeSender + '\', \'' + cleanText + '\', \'' + (m.id || '') + '\')" style="margin-left:6px; cursor:pointer; font-size:12px; opacity:0.6;" title="Reply">↩</span>' +
+          '<span onclick="event.stopPropagation(); setReplyTarget(\'' + safeSender + '\', \'' + cleanText + '\', \'' + safeMsgId + '\')" style="margin-left:6px; cursor:pointer; font-size:12px; opacity:0.6;" title="Reply">↩</span>' +
           delBtn +
         '</div>' +
       '</div>';
@@ -459,6 +494,69 @@ html+='<div class="msg-bubble '+cls+'" ondblclick="setReplyTarget(\'' + safeSend
 el.innerHTML=html+'<div style="clear:both"></div>';
 if(!silent||wasAtBottom)el.scrollTop=el.scrollHeight;
 });
+}
+
+var activeMenuMsg = null;
+var touchTimer = null;
+
+function handleTouchStart(e, phone, msgId, text, senderName) {
+  touchTimer = setTimeout(function() {
+    openContextMenu(e, phone, msgId, text, senderName);
+  }, 500);
+}
+
+function handleTouchEnd() {
+  if (touchTimer) clearTimeout(touchTimer);
+}
+
+function openContextMenu(e, phone, msgId, text, senderName) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  activeMenuMsg = { phone: phone, msgId: msgId, text: text, senderName: senderName };
+
+  var menu = document.getElementById("contextMenu");
+  if (!menu) return;
+  menu.style.display = "block";
+
+  var posX = e ? (e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 100)) : 100;
+  var posY = e ? (e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 100)) : 100;
+
+  if (posX + 200 > window.innerWidth) posX = window.innerWidth - 210;
+  if (posY + 150 > window.innerHeight) posY = window.innerHeight - 160;
+
+  menu.style.left = posX + "px";
+  menu.style.top = posY + "px";
+}
+
+function hideContextMenu() {
+  var menu = document.getElementById("contextMenu");
+  if (menu) menu.style.display = "none";
+}
+
+document.addEventListener("click", hideContextMenu);
+document.addEventListener("scroll", hideContextMenu, true);
+
+function onMenuReply() {
+  hideContextMenu();
+  if (activeMenuMsg) {
+    setReplyTarget(activeMenuMsg.senderName, activeMenuMsg.text, activeMenuMsg.msgId);
+  }
+}
+
+function onMenuCopy() {
+  hideContextMenu();
+  if (activeMenuMsg && activeMenuMsg.text) {
+    navigator.clipboard.writeText(activeMenuMsg.text);
+  }
+}
+
+function onMenuDeleteForEveryone() {
+  hideContextMenu();
+  if (activeMenuMsg && activeMenuMsg.phone && activeMenuMsg.msgId) {
+    deleteForEveryone(activeMenuMsg.phone, activeMenuMsg.msgId);
+  }
 }
 
 function deleteForEveryone(phone, msgId) {
