@@ -673,7 +673,9 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
         },
       });
 
-      storeMessage(phone, "You", "[OUT_IMAGE_MEDIA:" + mediaId + "]", "out");
+      var isViewOnce = req.body.isViewOnce === "true";
+      var msgTag = isViewOnce ? "[OUT_VIEW_ONCE_MEDIA:" + mediaId + "]" : "[OUT_IMAGE_MEDIA:" + mediaId + "]";
+      storeMessage(phone, "You", msgTag, "out");
 
       // INSTANTLY delete temp file from server disk (100% Stateless — 0 Bytes stored on server!)
       if (fs.existsSync(filePath)) {
@@ -683,7 +685,7 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
         } catch(e) {}
       }
 
-      return res.json({ success: true, mediaId: mediaId });
+      return res.json({ success: true, mediaId: mediaId, isViewOnce: isViewOnce });
     }
   } catch (err1) {
     console.error("Meta Media Upload failed, trying URL fallback:", err1.response ? err1.response.data : err1.message);

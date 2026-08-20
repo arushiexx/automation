@@ -194,8 +194,9 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
   <div id="replyPreviewText" style="color:#8696a0; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">Quoted message</div>
 </div>
 <div class="input-bar">
-<button class="attach-btn" onclick="document.getElementById('mediaFile').click()">&#128206;</button>
-<input type="file" id="mediaFile" accept="image/*" style="display:none" onchange="sendMedia(event)">
+<button class="attach-btn" onclick="document.getElementById('mediaFile').click()" title="Attach Photo/Video">&#128206;</button>
+<button id="viewOnceBtn" onclick="toggleViewOnce()" class="attach-btn" title="Toggle View-Once Mode" style="font-size:12px; font-weight:700; color:#8696a0; border:1px solid #374045; border-radius:14px; padding:3px 8px; background:transparent;">1️⃣ Off</button>
+<input type="file" id="mediaFile" accept="image/*,video/*" style="display:none" onchange="sendMedia(event)">
 <input type="text" id="msgInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMsg()">
 <button onclick="sendMsg()">&#10148;</button>
 </div>
@@ -470,6 +471,12 @@ if (m.text === "[DELETED_FOR_EVERYONE]") {
                 '<span style="font-size:10px;opacity:0.75;margin-top:2px;">Expires 1 min after view</span>' +
               '</div>' +
             '</div>';
+} else if (m.text.startsWith("[OUT_VIEW_ONCE_MEDIA:")) {
+  if (m.status === "read") {
+    content = '<div style="padding:6px 12px; background:rgba(0,168,132,0.12); border-radius:8px; color:#00a884; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;"><span>🔒</span> <span>Opened (View Once Media Expired)</span></div>';
+  } else {
+    content = '<div style="padding:6px 12px; background:rgba(0,168,132,0.2); border-radius:8px; color:#00a884; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;"><span>1️⃣</span> <span>View Once Photo/Video (Sent)</span></div>';
+  }
 } else if (m.text.startsWith("[OUT_IMAGE_MEDIA:")) {
   var mediaId = m.text.substring(17, m.text.length-1);
   content = '<img src="/api/media/' + mediaId + '?token=' + TOKEN + '" style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block">';
@@ -575,6 +582,25 @@ function deleteForEveryone(phone, msgId) {
   });
 }
 
+var isViewOnce = false;
+
+function toggleViewOnce() {
+  isViewOnce = !isViewOnce;
+  var btn = document.getElementById("viewOnceBtn");
+  if (!btn) return;
+  if (isViewOnce) {
+    btn.style.background = "#00a884";
+    btn.style.color = "#fff";
+    btn.style.borderColor = "#00a884";
+    btn.textContent = "1️⃣ View Once ON";
+  } else {
+    btn.style.background = "transparent";
+    btn.style.color = "#8696a0";
+    btn.style.borderColor = "#374045";
+    btn.textContent = "1️⃣ Off";
+  }
+}
+
 function sendMedia(e){
 var file = e.target.files[0];
 if(!file || !currentPhone) return;
@@ -582,9 +608,12 @@ document.getElementById('mediaFile').value = ""; // reset
 var fd = new FormData();
 fd.append("phone", currentPhone);
 fd.append("file", file, file.name || "image.jpg");
+fd.append("isViewOnce", isViewOnce ? "true" : "false");
+
 var input = document.getElementById("msgInput");
 var oldPlaceholder = input.placeholder;
-input.placeholder = "Sending image...";
+input.placeholder = isViewOnce ? "Sending View Once media..." : "Sending image...";
+
 api("/api/send-media", { method: "POST", body: fd })
 .then(function(r){
   if (!r.ok) return r.json().then(function(err){ throw new Error(err.error || "Failed to send image"); });
@@ -592,6 +621,7 @@ api("/api/send-media", { method: "POST", body: fd })
 })
 .then(function(){
   input.placeholder = oldPlaceholder;
+  if (isViewOnce) toggleViewOnce(); // reset toggle
   loadMessages(currentPhone);
   setTimeout(function(){loadConversations()},500);
 }).catch(function(err){
