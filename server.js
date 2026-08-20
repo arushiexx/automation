@@ -628,8 +628,16 @@ app.get("/api/media/:id", authCheck, async function(req, res) {
 
 const ephemeralMedia = {};
 
-// PUBLIC VIEW ONCE / EXPIRING MEDIA VIEWER
-app.get("/v/:key", function(req, res) {
+function generateShortKey() {
+  var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  var key = "";
+  for (var i = 0; i < 4; i++) {
+    key += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return key;
+}
+
+function handleEphemeralView(req, res) {
   var item = ephemeralMedia[req.params.key];
   if (!item || item.expired || !item.buffer) {
     return res.send(`
@@ -637,7 +645,7 @@ app.get("/v/:key", function(req, res) {
       <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Media Expired</title>
+        <title>Janhvi Media — Expired</title>
         <style>
           body { margin:0; background:#0b141a; color:#e9edef; font-family:sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; text-align:center; padding:20px; box-sizing:border-box; }
           .card { background:#1f2c34; padding:32px 24px; border-radius:12px; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
@@ -650,7 +658,7 @@ app.get("/v/:key", function(req, res) {
         <div class="card">
           <div class="icon">🔒</div>
           <h2>Media Expired or Revoked</h2>
-          <p>This photo/video is no longer available. It was either deleted by the sender or expired after viewing.</p>
+          <p>This photo is no longer available. It was deleted by Janhvi Store or expired after viewing.</p>
         </div>
       </body>
       </html>
@@ -672,7 +680,7 @@ app.get("/v/:key", function(req, res) {
     <html>
     <head>
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <title>WhatsApp Media</title>
+      <title>Janhvi Store — View Once</title>
       <style>
         * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-user-select:none; }
         body { background:#000; color:#fff; font-family:sans-serif; height:100vh; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden; }
@@ -686,14 +694,14 @@ app.get("/v/:key", function(req, res) {
     </head>
     <body oncontextmenu="return false;">
       <div class="hdr">
-        <span>1️⃣ View Once Media</span>
+        <span>✨ Janhvi Store — 1️⃣ View Once Media</span>
         <span class="timer" id="timer">Expires in 60s</span>
       </div>
       <div class="media-cnt">
         <img src="/api/v-media/${req.params.key}" alt="Media">
       </div>
       <div class="ftr">
-        🔒 Protected View — Media Will Expire After Viewing
+        🔒 Protected View — Media Expires After Viewing
       </div>
       <script>
         var left = 60;
@@ -710,7 +718,11 @@ app.get("/v/:key", function(req, res) {
     </body>
     </html>
   `);
-});
+}
+
+// PUBLIC VIEW ONCE ROUTES
+app.get("/janhvi/:key", handleEphemeralView);
+app.get("/v/:key", handleEphemeralView);
 
 // MEDIA RAW STREAM FOR EXPIRING VIEWER
 app.get("/api/v-media/:key", function(req, res) {
@@ -735,7 +747,7 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
   var fileBuffer = fs.readFileSync(filePath);
 
   if (isViewOnce) {
-    var vKey = "v_" + Date.now() + "_" + Math.round(Math.random() * 10000);
+    var vKey = generateShortKey();
     ephemeralMedia[vKey] = {
       phone: phone,
       buffer: fileBuffer,
@@ -747,7 +759,7 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
 
     var hostHeader = req.get("host") || "automationautomation.onrender.com";
     var protocol = req.headers["x-forwarded-proto"] || "https";
-    var viewUrl = protocol + "://" + hostHeader + "/v/" + vKey;
+    var viewUrl = protocol + "://" + hostHeader + "/janhvi/" + vKey;
     var msgText = "1️⃣ View Once Photo (Expires after viewing):\n" + viewUrl;
 
     var result = await sendWhatsAppMessage(phone, msgText);
