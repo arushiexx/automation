@@ -532,22 +532,26 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
   if (!phone || !req.file) return res.status(400).json({error: "Missing phone or file"});
 
   var filePath = req.file.path;
+  var fileName = req.file.filename;
 
   // Auto-delete file from server after 1 minute (60,000 ms)
   setTimeout(function() {
     if (fs.existsSync(filePath)) {
       fs.unlink(filePath, function(err) {
-        if (!err) console.log("🗑️ Auto-deleted uploaded image after 1 minute:", req.file.filename);
+        if (!err) console.log("🗑️ Auto-deleted uploaded image after 1 minute:", fileName);
       });
     }
   }, 60 * 1000);
 
+  // Method 1: Try Uploading directly to Meta Media API
   try {
-    // 1. Upload image directly to Meta WhatsApp Media Endpoint
     var formData = new FormData();
-    formData.append("file", fs.createReadStream(filePath));
-    formData.append("type", req.file.mimetype || "image/jpeg");
     formData.append("messaging_product", "whatsapp");
+    formData.append("type", req.file.mimetype || "image/jpeg");
+    formData.append("file", fs.createReadStream(filePath), {
+      filename: req.file.originalname || "image.jpg",
+      contentType: req.file.mimetype || "image/jpeg",
+    });
 
     var uploadRes = await axios.post(
       "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/media",
@@ -560,11 +564,35 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
     );
 
     var mediaId = uploadRes.data && uploadRes.data.id;
-    if (!mediaId) throw new Error("No media ID returned from Meta");
+    if (mediaId) {
+      await axios({
+        method: "POST",
+        url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
+        headers: {
+          Authorization: "Bearer " + WHATSAPP_TOKEN,
+          "Content-Type": "application/json",
+        },
+        data: {
+          messaging_product: "whatsapp",
+          to: phone,
+          type: "image",
+          image: { id: mediaId }
+        },
+      });
 
-    console.log("Uploaded media to Meta, Media ID: " + mediaId);
+      storeMessage(phone, "You", "[OUT_IMAGE_MEDIA:" + mediaId + "]", "out");
+      return res.json({ success: true, mediaId: mediaId });
+    }
+  } catch (err1) {
+    console.error("Meta Media Upload failed, trying URL fallback:", err1.response ? err1.response.data : err1.message);
+  }
 
-    // 2. Send image message using media ID
+  // Method 2 (Fallback): Send via Public Server Link
+  try {
+    var hostHeader = req.get("host") || "automationautomation.onrender.com";
+    var protocol = req.headers["x-forwarded-proto"] || "https";
+    var fileUrl = protocol + "://" + hostHeader + "/uploads/" + fileName;
+
     await axios({
       method: "POST",
       url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
@@ -576,15 +604,15 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
         messaging_product: "whatsapp",
         to: phone,
         type: "image",
-        image: { id: mediaId }
+        image: { link: fileUrl }
       },
     });
 
-    storeMessage(phone, "You", "[OUT_IMAGE_MEDIA:" + mediaId + "]", "out");
-    res.json({success: true, mediaId: mediaId});
-  } catch (error) {
-    console.error("Failed to send image:", error.response ? error.response.data : error.message);
-    res.status(500).json({error: (error.response && error.response.data && error.response.data.error && error.response.data.error.message) || error.message});
+    storeMessage(phone, "You", "[OUT_IMAGE:" + fileUrl + "]", "out");
+    res.json({ success: true, url: fileUrl });
+  } catch (err2) {
+    console.error("Image Send Error:", err2.response ? err2.response.data : err2.message);
+    res.status(500).json({ error: (err2.response && err2.response.data && err2.response.data.error && err2.response.data.error.message) || err2.message });
   }
 });
 
