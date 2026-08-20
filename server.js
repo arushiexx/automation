@@ -470,7 +470,7 @@ app.post("/api/delete-message", authCheck, async function(req, res) {
     }
   }
 
-  // 2. Mark as deleted in database
+  // 2. Mark as deleted in database and revoke ephemeral links
   var msgs = messages[phone].msgs;
   var updated = false;
   for (var i = 0; i < msgs.length; i++) {
@@ -478,6 +478,14 @@ app.post("/api/delete-message", authCheck, async function(req, res) {
       msgs[i].text = "[DELETED_FOR_EVERYONE]";
       updated = true;
       break;
+    }
+  }
+
+  for (var k in ephemeralMedia) {
+    if (ephemeralMedia[k].msgId === msgId || ephemeralMedia[k].phone === phone) {
+      ephemeralMedia[k].expired = true;
+      ephemeralMedia[k].buffer = null;
+      console.log("🔒 Instantly revoked ephemeral media link key:", k);
     }
   }
 
@@ -618,6 +626,103 @@ app.get("/api/media/:id", authCheck, async function(req, res) {
   }
 });
 
+const ephemeralMedia = {};
+
+// PUBLIC VIEW ONCE / EXPIRING MEDIA VIEWER
+app.get("/v/:key", function(req, res) {
+  var item = ephemeralMedia[req.params.key];
+  if (!item || item.expired || !item.buffer) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Media Expired</title>
+        <style>
+          body { margin:0; background:#0b141a; color:#e9edef; font-family:sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; text-align:center; padding:20px; box-sizing:border-box; }
+          .card { background:#1f2c34; padding:32px 24px; border-radius:12px; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
+          .icon { font-size:56px; margin-bottom:16px; }
+          h2 { color:#00a884; font-size:20px; margin:0 0 8px 0; }
+          p { color:#8696a0; font-size:14px; margin:0; line-height:1.5; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="icon">🔒</div>
+          <h2>Media Expired or Revoked</h2>
+          <p>This photo/video is no longer available. It was either deleted by the sender or expired after viewing.</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
+  // Mark as viewed on first access
+  item.viewed = true;
+  if (!item.viewedAt) item.viewedAt = Date.now();
+
+  // Auto-expire 60 seconds after first view
+  setTimeout(function() {
+    item.expired = true;
+    item.buffer = null; // wipe buffer from memory
+  }, 60 * 1000);
+
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <title>WhatsApp Media</title>
+      <style>
+        * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-user-select:none; }
+        body { background:#000; color:#fff; font-family:sans-serif; height:100vh; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden; }
+        .hdr { padding:14px 16px; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:space-between; z-index:10; }
+        .hdr span { color:#00a884; font-weight:600; font-size:14px; }
+        .timer { font-size:12px; color:#ea4335; background:rgba(234,67,53,0.15); padding:4px 8px; border-radius:12px; font-weight:bold; }
+        .media-cnt { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
+        img, video { max-width:100%; max-height:100%; object-fit:contain; pointer-events:none; }
+        .ftr { padding:12px; text-align:center; color:#8696a0; font-size:12px; background:rgba(0,0,0,0.85); }
+      </style>
+    </head>
+    <body oncontextmenu="return false;">
+      <div class="hdr">
+        <span>1️⃣ View Once Media</span>
+        <span class="timer" id="timer">Expires in 60s</span>
+      </div>
+      <div class="media-cnt">
+        <img src="/api/v-media/${req.params.key}" alt="Media">
+      </div>
+      <div class="ftr">
+        🔒 Protected View — Media Will Expire After Viewing
+      </div>
+      <script>
+        var left = 60;
+        var t = setInterval(function() {
+          left--;
+          if (left <= 0) {
+            clearInterval(t);
+            location.reload();
+          } else {
+            document.getElementById("timer").textContent = "Expires in " + left + "s";
+          }
+        }, 1000);
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// MEDIA RAW STREAM FOR EXPIRING VIEWER
+app.get("/api/v-media/:key", function(req, res) {
+  var item = ephemeralMedia[req.params.key];
+  if (!item || item.expired || !item.buffer) {
+    return res.status(410).send("Expired");
+  }
+  res.setHeader("Content-Type", item.mimetype || "image/jpeg");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.send(item.buffer);
+});
+
 // SEND MEDIA
 app.post("/api/send-media", authCheck, upload.single("file"), async function(req, res) {
   var phone = req.body.phone;
@@ -625,19 +730,42 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
 
   var filePath = req.file.path;
   var fileName = req.file.filename;
+  var isViewOnce = req.body.isViewOnce === "true";
 
-  // Auto-delete file from server after 1 minute (60,000 ms)
-  setTimeout(function() {
+  var fileBuffer = fs.readFileSync(filePath);
+
+  if (isViewOnce) {
+    var vKey = "v_" + Date.now() + "_" + Math.round(Math.random() * 10000);
+    ephemeralMedia[vKey] = {
+      phone: phone,
+      buffer: fileBuffer,
+      mimetype: req.file.mimetype || "image/jpeg",
+      created: Date.now(),
+      viewed: false,
+      expired: false
+    };
+
+    var hostHeader = req.get("host") || "automationautomation.onrender.com";
+    var protocol = req.headers["x-forwarded-proto"] || "https";
+    var viewUrl = protocol + "://" + hostHeader + "/v/" + vKey;
+    var msgText = "1️⃣ View Once Photo (Expires after viewing):\n" + viewUrl;
+
+    var result = await sendWhatsAppMessage(phone, msgText);
+    var sentId = typeof result === "string" ? result : "v_msg_" + Date.now();
+
+    ephemeralMedia[vKey].msgId = sentId;
+
+    storeMessage(phone, "You", "[OUT_VIEW_ONCE_LINK:" + vKey + "]", "out", sentId, "sent");
+
     if (fs.existsSync(filePath)) {
-      fs.unlink(filePath, function(err) {
-        if (!err) console.log("🗑️ Auto-deleted uploaded image after 1 minute:", fileName);
-      });
+      try { fs.unlinkSync(filePath); } catch(e) {}
     }
-  }, 60 * 1000);
+
+    return res.json({ success: true, isViewOnce: true, vKey: vKey });
+  }
 
   // Method 1: Try Uploading directly to Meta Media API
   try {
-    var fileBuffer = fs.readFileSync(filePath);
     var formData = new FormData();
     formData.append("messaging_product", "whatsapp");
     formData.append("type", req.file.mimetype || "image/jpeg");
@@ -658,7 +786,7 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
 
     var mediaId = uploadRes.data && uploadRes.data.id;
     if (mediaId) {
-      await axios({
+      var sendRes = await axios({
         method: "POST",
         url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
         headers: {
@@ -673,22 +801,17 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
         },
       });
 
-      var isViewOnce = req.body.isViewOnce === "true";
-      var msgTag = isViewOnce ? "[OUT_VIEW_ONCE_MEDIA:" + mediaId + "]" : "[OUT_IMAGE_MEDIA:" + mediaId + "]";
-      storeMessage(phone, "You", msgTag, "out");
+      var sentId = sendRes.data && sendRes.data.messages && sendRes.data.messages[0] ? sendRes.data.messages[0].id : null;
+      storeMessage(phone, "You", "[OUT_IMAGE_MEDIA:" + mediaId + "]", "out", sentId, "sent");
 
-      // INSTANTLY delete temp file from server disk (100% Stateless — 0 Bytes stored on server!)
       if (fs.existsSync(filePath)) {
-        try {
-          fs.unlinkSync(filePath);
-          console.log("⚡ Instantly deleted temp upload file. Server is 100% Stateless!");
-        } catch(e) {}
+        try { fs.unlinkSync(filePath); } catch(e) {}
       }
 
-      return res.json({ success: true, mediaId: mediaId, isViewOnce: isViewOnce });
+      return res.json({ success: true, mediaId: mediaId });
     }
   } catch (err1) {
-    console.error("Meta Media Upload failed, trying URL fallback:", err1.response ? err1.response.data : err1.message);
+    console.error("Meta Media Upload failed:", err1.response ? err1.response.data : err1.message);
   }
 
   // Method 2 (Fallback): Send via Public Server Link
@@ -697,7 +820,7 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
     var protocol = req.headers["x-forwarded-proto"] || "https";
     var fileUrl = protocol + "://" + hostHeader + "/uploads/" + fileName;
 
-    await axios({
+    var sendRes2 = await axios({
       method: "POST",
       url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
       headers: {
@@ -712,18 +835,16 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
       },
     });
 
-    storeMessage(phone, "You", "[OUT_IMAGE:" + fileUrl + "]", "out");
+    var sentId2 = sendRes2.data && sendRes2.data.messages && sendRes2.data.messages[0] ? sendRes2.data.messages[0].id : null;
+    storeMessage(phone, "You", "[OUT_IMAGE:" + fileUrl + "]", "out", sentId2, "sent");
     res.json({ success: true, url: fileUrl });
   } catch (err2) {
     console.error("Image Send Error:", err2.response ? err2.response.data : err2.message);
     res.status(500).json({ error: (err2.response && err2.response.data && err2.response.data.error && err2.response.data.error.message) || err2.message });
   } finally {
-    // Immediate cleanup fallback (3s)
-    setTimeout(function() {
-      if (fs.existsSync(filePath)) {
-        try { fs.unlinkSync(filePath); console.log("⚡ Cleaned temp file fallback"); } catch(e) {}
-      }
-    }, 3000);
+    if (fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch(e) {}
+    }
   }
 });
 
