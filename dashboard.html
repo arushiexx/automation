@@ -195,7 +195,6 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
 </div>
 <div class="input-bar">
 <button class="attach-btn" onclick="document.getElementById('mediaFile').click()" title="Attach Photo/Video">&#128206;</button>
-<button id="viewOnceBtn" onclick="toggleViewOnce()" class="attach-btn" title="Toggle View-Once Mode" style="font-size:12px; font-weight:700; color:#8696a0; border:1px solid #374045; border-radius:14px; padding:3px 8px; background:transparent;">1️⃣ Off</button>
 <input type="file" id="mediaFile" accept="image/*,video/*" style="display:none" onchange="sendMedia(event)">
 <input type="text" id="msgInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMsg()">
 <button onclick="sendMsg()">&#10148;</button>

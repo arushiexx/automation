@@ -742,41 +742,10 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
 
   var filePath = req.file.path;
   var fileName = req.file.filename;
-  var isViewOnce = req.body.isViewOnce === "true";
 
   var fileBuffer = fs.readFileSync(filePath);
 
-  if (isViewOnce) {
-    var vKey = generateShortKey();
-    ephemeralMedia[vKey] = {
-      phone: phone,
-      buffer: fileBuffer,
-      mimetype: req.file.mimetype || "image/jpeg",
-      created: Date.now(),
-      viewed: false,
-      expired: false
-    };
-
-    var hostHeader = req.get("host") || "automationautomation.onrender.com";
-    var protocol = req.headers["x-forwarded-proto"] || "https";
-    var viewUrl = protocol + "://" + hostHeader + "/janhvi/" + vKey;
-    var msgText = "1️⃣ View Once Photo (Expires after viewing):\n" + viewUrl;
-
-    var result = await sendWhatsAppMessage(phone, msgText);
-    var sentId = typeof result === "string" ? result : "v_msg_" + Date.now();
-
-    ephemeralMedia[vKey].msgId = sentId;
-
-    storeMessage(phone, "You", "[OUT_VIEW_ONCE_LINK:" + vKey + "]", "out", sentId, "sent");
-
-    if (fs.existsSync(filePath)) {
-      try { fs.unlinkSync(filePath); } catch(e) {}
-    }
-
-    return res.json({ success: true, isViewOnce: true, vKey: vKey });
-  }
-
-  // Method 1: Try Uploading directly to Meta Media API
+  // Method 1: Upload directly to Meta Media API and send native WhatsApp image
   try {
     var formData = new FormData();
     formData.append("messaging_product", "whatsapp");
