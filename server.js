@@ -439,6 +439,56 @@ app.post("/api/expire-message", authCheck, function(req, res) {
   }
 });
 
+// DELETE FOR EVERYONE (REVOKE MESSAGE ON WHATSAPP & DASHBOARD)
+app.post("/api/delete-message", authCheck, async function(req, res) {
+  var phone = req.body.phone;
+  var msgId = req.body.msgId;
+
+  if (!phone || !msgId || !messages[phone] || !messages[phone].msgs) {
+    return res.status(400).json({ error: "Invalid parameters" });
+  }
+
+  // 1. Revoke message on WhatsApp via Meta API if valid Meta message ID
+  if (msgId && !msgId.startsWith("local_")) {
+    try {
+      await axios({
+        method: "POST",
+        url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
+        headers: {
+          Authorization: "Bearer " + WHATSAPP_TOKEN,
+          "Content-Type": "application/json",
+        },
+        data: {
+          messaging_product: "whatsapp",
+          status: "deleted",
+          message_id: msgId,
+        },
+      });
+      console.log("🗑️ Revoked message on WhatsApp for everyone:", msgId);
+    } catch (metaErr) {
+      console.error("Meta Delete Error:", metaErr.response ? metaErr.response.data : metaErr.message);
+    }
+  }
+
+  // 2. Mark as deleted in database
+  var msgs = messages[phone].msgs;
+  var updated = false;
+  for (var i = 0; i < msgs.length; i++) {
+    if (msgs[i].id === msgId) {
+      msgs[i].text = "[DELETED_FOR_EVERYONE]";
+      updated = true;
+      break;
+    }
+  }
+
+  if (updated) {
+    saveJSON(MSG_FILE, messages);
+    res.json({ success: true, message: "Deleted for everyone" });
+  } else {
+    res.status(404).json({ error: "Message not found" });
+  }
+});
+
 // UPDATE AUTO-REPLY MESSAGE
 app.post("/api/auto-reply", authCheck, function(req, res) {
   var message = req.body.message;

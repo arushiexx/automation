@@ -414,7 +414,12 @@ if (m.dir === "out") {
 }
 
 var content = m.text.replace(/\n/g,"<br>");
-if (m.text === "[EXPIRED_IMAGE]") {
+if (m.text === "[DELETED_FOR_EVERYONE]") {
+  content = '<div style="padding:4px 8px; color:#8696a0; font-size:13px; font-style:italic; display:inline-flex; align-items:center; gap:6px;">' +
+              '<span>🚫</span>' +
+              '<span>This message was deleted</span>' +
+            '</div>';
+} else if (m.text === "[EXPIRED_IMAGE]") {
   content = '<div style="padding:6px 10px; background:rgba(255,255,255,0.06); border-radius:6px; color:#8696a0; font-size:12px; display:inline-flex; align-items:center; gap:6px;">' +
               '<span style="font-size:14px;">🔒</span>' +
               '<span>Photo Viewed (Expired)</span>' +
@@ -441,17 +446,35 @@ if (m.text === "[EXPIRED_IMAGE]") {
 
 var cleanText = m.text.startsWith("[IMAGE:") ? "Photo" : m.text.replace(/'/g, "\\'").replace(/\n/g, " ");
 var safeSender = senderName.replace(/'/g, "\\'");
+var delBtn = (m.text !== "[DELETED_FOR_EVERYONE]") ? '<span onclick="event.stopPropagation(); deleteForEveryone(\'' + phone + '\', \'' + (m.id || '') + '\')" style="margin-left:6px; cursor:pointer; font-size:12px; opacity:0.5; color:#ea4335;" title="Delete for everyone">🗑️</span>' : '';
 
 html+='<div class="msg-bubble '+cls+'" ondblclick="setReplyTarget(\'' + safeSender + '\', \'' + cleanText + '\', \'' + (m.id || '') + '\')">' +
         quotedHtml + content +
         '<div class="msg-time">' + time + statusTick +
           '<span onclick="event.stopPropagation(); setReplyTarget(\'' + safeSender + '\', \'' + cleanText + '\', \'' + (m.id || '') + '\')" style="margin-left:6px; cursor:pointer; font-size:12px; opacity:0.6;" title="Reply">↩</span>' +
+          delBtn +
         '</div>' +
       '</div>';
 }
 el.innerHTML=html+'<div style="clear:both"></div>';
 if(!silent||wasAtBottom)el.scrollTop=el.scrollHeight;
 });
+}
+
+function deleteForEveryone(phone, msgId) {
+  if (!msgId) return;
+  if (!confirm("Delete this message for everyone on WhatsApp?")) return;
+  api("/api/delete-message", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone: phone, msgId: msgId })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success) {
+      loadMessages(phone, true);
+    } else {
+      alert("Failed to delete message: " + (data.error || "Unknown error"));
+    }
+  });
 }
 
 function sendMedia(e){
