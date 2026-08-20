@@ -139,6 +139,31 @@ textarea.s-input{min-height:120px;resize:vertical;font-family:'Inter',sans-serif
 .menu-item.danger {
   color: #ea4335;
 }
+
+/* UNREAD BADGE */
+.unread-badge {
+  background: #00a884;
+  color: #111b21;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+.contact-item.has-unread .c-name {
+  color: #00a884 !important;
+  font-weight: 700 !important;
+}
+.contact-item.has-unread .c-last {
+  color: #e9edef !important;
+  font-weight: 600 !important;
+}
 </style>
 </head>
 <body>
@@ -343,6 +368,18 @@ function formatPhone(phone) {
   return "+" + clean;
 }
 
+var avatarHexColors = ["00a884", "34b7f1", "e91e63", "9c27b0", "ff9800", "4caf50"];
+
+function getAvatarUrl(name, phone) {
+  var num = 0;
+  for (var i = 0; i < (phone || "").length; i++) {
+    num += phone.charCodeAt(i);
+  }
+  var bg = avatarHexColors[num % avatarHexColors.length];
+  var cleanName = (name && name !== "Unknown") ? name : phone;
+  return "https://ui-avatars.com/api/?name=" + encodeURIComponent(cleanName) + "&background=" + bg + "&color=ffffff&size=128&bold=true&length=2";
+}
+
 function renderContacts(data){
 var el=document.getElementById("contactList");
 if(!data||!data.length){el.innerHTML='<div class="no-chats">No conversations yet</div>';return;}
@@ -354,18 +391,19 @@ var c=filtered[i];
 var formattedPhone = formatPhone(c.phone);
 var displayName = (c.name && c.name !== "Unknown") ? c.name : formattedPhone;
 var subTitle = (c.name && c.name !== "Unknown") ? formattedPhone : "";
-var avatarBg = getAvatarColor(c.phone);
-var initials = (displayName || "?")[0].toUpperCase();
+var avatarSrc = getAvatarUrl(c.name, c.phone);
+var unreadHtml = (c.unreadCount && c.unreadCount > 0) ? '<span class="unread-badge">' + c.unreadCount + '</span>' : '';
+var unreadCls = (c.unreadCount && c.unreadCount > 0) ? 'has-unread' : '';
 
 var time=c.lastTime?new Date(c.lastTime).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):"";
 var active=c.phone===currentPhone?"active":"";
 var lastMsg=(c.lastMessage||"").length>35?c.lastMessage.substring(0,35)+"...":c.lastMessage||"";
 var safeName=(c.name||"").replace(/'/g,"\\'").replace(/"/g,"&quot;");
 
-html+='<div class="contact-item '+active+'" onclick="openChat(\''+c.phone+"','"+safeName+"')\">";
-html+='<div class="c-avatar" style="background:' + avatarBg + '; font-weight:700; box-shadow:0 2px 8px rgba(0,0,0,0.3);">'+initials+'</div>';
+html+='<div class="contact-item '+active+' '+unreadCls+'" onclick="openChat(\''+c.phone+"','"+safeName+"')\">";
+html+='<img src="' + avatarSrc + '" class="c-avatar" style="width:40px; height:40px; border-radius:50%; object-fit:cover; margin-right:12px; box-shadow:0 2px 8px rgba(0,0,0,0.3);">';
 html+='<div class="c-info">';
-html+='<div class="c-name" style="font-weight:600; font-size:15px;">'+displayName+'</div>';
+html+='<div class="c-name" style="font-weight:600; font-size:15px; display:flex; justify-content:space-between; align-items:center;"><span>'+displayName+'</span>' + unreadHtml + '</div>';
 if (subTitle) {
   html+='<div class="c-phone-sub" style="font-size:12px; color:#8696a0; margin-top:1px;">' + subTitle + '</div>';
 }
@@ -386,19 +424,26 @@ if(document.getElementById("emptyState"))document.getElementById("emptyState").s
 
 var formattedPhone = formatPhone(phone);
 var displayName = (name && name !== "Unknown") ? name : formattedPhone;
-var avatarBg = getAvatarColor(phone);
-var initials = (displayName || "?")[0].toUpperCase();
+var avatarSrc = getAvatarUrl(name, phone);
 
 document.getElementById("chatName").textContent=displayName;
 document.getElementById("chatPhone").textContent=(name && name !== "Unknown") ? formattedPhone : "";
-document.getElementById("chatAvatar").textContent=initials;
-document.getElementById("chatAvatar").style.background=avatarBg;
+
+var avatarEl = document.getElementById("chatAvatar");
+avatarEl.innerHTML = '<img src="' + avatarSrc + '" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">';
 
 if(isMobile){
 document.getElementById("chatScreen").classList.add("open");
 }
-loadMessages(phone);
-renderContacts(conversations);
+
+api("/api/mark-read", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ phone: phone })
+}).then(function() {
+  loadMessages(phone);
+  loadConversations();
+});
 }
 
 function goBackToLobby(){

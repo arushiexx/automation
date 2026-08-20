@@ -155,8 +155,12 @@ function getRandomDelay() {
 }
 
 function storeMessage(phone, name, text, direction, msgId, status, quoted) {
-  if (!messages[phone]) messages[phone] = { name: name || "Unknown", msgs: [] };
+  if (!messages[phone]) messages[phone] = { name: name || "Unknown", msgs: [], unreadCount: 0 };
   if (name && name !== "Unknown") messages[phone].name = name;
+
+  if (direction === "in") {
+    messages[phone].unreadCount = (messages[phone].unreadCount || 0) + 1;
+  }
 
   var newMsg = {
     id: msgId || ("local_" + Date.now() + "_" + Math.floor(Math.random() * 1000)),
@@ -368,11 +372,22 @@ app.get("/api/conversations", authCheck, function(req, res) {
       name: data.name,
       lastMessage: lastMsg ? lastMsg.text : "",
       lastTime: lastMsg ? lastMsg.ts : "",
-      msgCount: data.msgs.length
+      msgCount: data.msgs.length,
+      unreadCount: data.unreadCount || 0
     });
   }
   convos.sort(function(a, b) { return new Date(b.lastTime) - new Date(a.lastTime); });
   res.json(convos);
+});
+
+// MARK CONVERSATION AS READ
+app.post("/api/mark-read", authCheck, function(req, res) {
+  var phone = req.body.phone;
+  if (phone && messages[phone]) {
+    messages[phone].unreadCount = 0;
+    saveJSON(MSG_FILE, messages);
+  }
+  res.json({ success: true });
 });
 
 // GET MESSAGES FOR A CONTACT
