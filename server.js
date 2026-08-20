@@ -287,12 +287,15 @@ app.post("/webhook", async function(req, res) {
       var message = msgs[i];
       var from = message.from;
       var messageId = message.id;
-      var customerName = (value.contacts && value.contacts[0] && value.contacts[0].profile) ? value.contacts[0].profile.name : "Unknown";
+      
+      var contactObj = (value.contacts || []).find(function(c) { return c.wa_id === from || c.wa_id === message.from; }) || (value.contacts && value.contacts[0]);
+      var customerName = (contactObj && contactObj.profile && contactObj.profile.name) ? contactObj.profile.name : "";
+      
       var msgText = "[media/other]";
       if (message.type === "text" && message.text) msgText = message.text.body;
       else if (message.type === "image" && message.image) msgText = "[IMAGE:" + message.image.id + "]";
 
-      console.log("Message from " + customerName + " (" + from + "): " + msgText);
+      console.log("Message from " + (customerName || from) + " (" + from + "): " + msgText);
 
       var contextObj = message.context ? {
         name: customerName,

@@ -280,6 +280,35 @@ renderContacts(data);
 });
 }
 
+var avatarColors = [
+  "linear-gradient(135deg, #00a884, #005c4b)",
+  "linear-gradient(135deg, #34b7f1, #128c7e)",
+  "linear-gradient(135deg, #e91e63, #ad1457)",
+  "linear-gradient(135deg, #9c27b0, #6a1b9a)",
+  "linear-gradient(135deg, #ff9800, #e65100)",
+  "linear-gradient(135deg, #4caf50, #2e7d32)"
+];
+
+function getAvatarColor(phone) {
+  var num = 0;
+  for (var i = 0; i < (phone || "").length; i++) {
+    num += phone.charCodeAt(i);
+  }
+  return avatarColors[num % avatarColors.length];
+}
+
+function formatPhone(phone) {
+  if (!phone) return "";
+  var clean = phone.replace(/\D/g, "");
+  if (clean.length === 12 && clean.startsWith("91")) {
+    return "+91 " + clean.substring(2, 7) + " " + clean.substring(7);
+  }
+  if (clean.length === 10) {
+    return "+91 " + clean.substring(0, 5) + " " + clean.substring(5);
+  }
+  return "+" + clean;
+}
+
 function renderContacts(data){
 var el=document.getElementById("contactList");
 if(!data||!data.length){el.innerHTML='<div class="no-chats">No conversations yet</div>';return;}
@@ -288,15 +317,24 @@ var filtered=search?data.filter(function(c){return(c.name||"").toLowerCase().ind
 var html="";
 for(var i=0;i<filtered.length;i++){
 var c=filtered[i];
-var initials=(c.name||"?")[0].toUpperCase();
+var formattedPhone = formatPhone(c.phone);
+var displayName = (c.name && c.name !== "Unknown") ? c.name : formattedPhone;
+var subTitle = (c.name && c.name !== "Unknown") ? formattedPhone : "";
+var avatarBg = getAvatarColor(c.phone);
+var initials = (displayName || "?")[0].toUpperCase();
+
 var time=c.lastTime?new Date(c.lastTime).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):"";
 var active=c.phone===currentPhone?"active":"";
 var lastMsg=(c.lastMessage||"").length>35?c.lastMessage.substring(0,35)+"...":c.lastMessage||"";
 var safeName=(c.name||"").replace(/'/g,"\\'").replace(/"/g,"&quot;");
+
 html+='<div class="contact-item '+active+'" onclick="openChat(\''+c.phone+"','"+safeName+"')\">";
-html+='<div class="c-avatar">'+initials+'</div>';
+html+='<div class="c-avatar" style="background:' + avatarBg + '; font-weight:700; box-shadow:0 2px 8px rgba(0,0,0,0.3);">'+initials+'</div>';
 html+='<div class="c-info">';
-html+='<div class="c-name">'+(c.name||c.phone)+'</div>';
+html+='<div class="c-name" style="font-weight:600; font-size:15px;">'+displayName+'</div>';
+if (subTitle) {
+  html+='<div class="c-phone-sub" style="font-size:12px; color:#8696a0; margin-top:1px;">' + subTitle + '</div>';
+}
 html+='<div class="c-last">'+lastMsg+'</div>';
 html+='</div>';
 html+='<span class="c-time">'+time+'</span>';
@@ -311,9 +349,17 @@ function openChat(phone,name){
 currentPhone=phone;
 document.getElementById("chatContent").style.display="flex";
 if(document.getElementById("emptyState"))document.getElementById("emptyState").style.display="none";
-document.getElementById("chatName").textContent=name||phone;
-document.getElementById("chatPhone").textContent="+"+phone;
-document.getElementById("chatAvatar").textContent=(name||"?")[0].toUpperCase();
+
+var formattedPhone = formatPhone(phone);
+var displayName = (name && name !== "Unknown") ? name : formattedPhone;
+var avatarBg = getAvatarColor(phone);
+var initials = (displayName || "?")[0].toUpperCase();
+
+document.getElementById("chatName").textContent=displayName;
+document.getElementById("chatPhone").textContent=(name && name !== "Unknown") ? formattedPhone : "";
+document.getElementById("chatAvatar").textContent=initials;
+document.getElementById("chatAvatar").style.background=avatarBg;
+
 if(isMobile){
 document.getElementById("chatScreen").classList.add("open");
 }
