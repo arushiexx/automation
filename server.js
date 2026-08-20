@@ -41,6 +41,7 @@ const GIST_ID = process.env.GIST_ID || "ec909a5de4596fdb9ead26557529044b";
 var SETTINGS_FILE = path.join(__dirname, "settings.json");
 var DB_FILE = path.join(__dirname, "customers.json");
 var MSG_FILE = path.join(__dirname, "messages.json");
+var BLOCKED_FILE = path.join(__dirname, "blocked.json");
 
 function loadJSON(file) {
   try {
@@ -52,6 +53,7 @@ function loadJSON(file) {
 var customers = loadJSON(DB_FILE);
 var messages = loadJSON(MSG_FILE);
 var settings = loadJSON(SETTINGS_FILE);
+var blockedContacts = loadJSON(BLOCKED_FILE);
 var AUTO_REPLY_MESSAGE = settings.AUTO_REPLY_MESSAGE || process.env.AUTO_REPLY_MESSAGE ||
   "Demo Rs.39\nFree me demo nahi milega\n\nMeri photo channel me upload hai jaakr dekh lo\n\nJise service chahiye YES likh ke msg kare, rate list bhejungi\n\nChannel: https://whatsapp.com/channel/0029Vb8iWeuKGGGE9pLrhA2k";
 
@@ -291,6 +293,11 @@ app.post("/webhook", async function(req, res) {
       var message = msgs[i];
       var from = message.from;
       var messageId = message.id;
+
+      if (blockedContacts[from]) {
+        console.log("🚫 Ignored message from blocked number:", from);
+        continue;
+      }
       
       var contactObj = (value.contacts || []).find(function(c) { return c.wa_id === from || c.wa_id === message.from; }) || (value.contacts && value.contacts[0]);
       var customerName = (contactObj && contactObj.profile && contactObj.profile.name) ? contactObj.profile.name : "";
@@ -388,6 +395,71 @@ app.post("/api/mark-read", authCheck, function(req, res) {
     saveJSON(MSG_FILE, messages);
   }
   res.json({ success: true });
+});
+
+// BLOCK CONTACT (META API + LOCAL BLOCKLIST)
+app.post("/api/block", authCheck, async function(req, res) {
+  var phone = req.body.phone;
+  var name = req.body.name || "Customer";
+  if (!phone) return res.status(400).json({ error: "Missing phone" });
+
+  // 1. Call Meta Official Block Users API
+  try {
+    await axios({
+      method: "POST",
+      url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/block_users",
+      headers: {
+        Authorization: "Bearer " + WHATSAPP_TOKEN,
+        "Content-Type": "application/json",
+      },
+      data: {
+        messaging_product: "whatsapp",
+        block_users: [{ user: phone }]
+      },
+    });
+    console.log("🚫 Meta Block API Success for:", phone);
+  } catch (metaErr) {
+    console.error("Meta Block API Notice:", metaErr.response ? metaErr.response.data : metaErr.message);
+  }
+
+  // 2. Store in local blocked.json
+  blockedContacts[phone] = {
+    name: name,
+    blockedAt: new Date().toISOString()
+  };
+  saveJSON(BLOCKED_FILE, blockedContacts);
+
+  res.json({ success: true, isBlocked: true, message: "Contact blocked successfully" });
+});
+
+// UNBLOCK CONTACT
+app.post("/api/unblock", authCheck, async function(req, res) {
+  var phone = req.body.phone;
+  if (!phone) return res.status(400).json({ error: "Missing phone" });
+
+  delete blockedContacts[phone];
+  saveJSON(BLOCKED_FILE, blockedContacts);
+
+  res.json({ success: true, isBlocked: false, message: "Contact unblocked successfully" });
+});
+
+// CHECK BLOCKED STATUS
+app.get("/api/blocked-status/:phone", authCheck, function(req, res) {
+  var phone = req.params.phone;
+  res.json({ isBlocked: !!blockedContacts[phone] });
+});
+
+// LIST ALL BLOCKED CONTACTS
+app.get("/api/blocked-list", authCheck, function(req, res) {
+  var list = [];
+  for (var phone in blockedContacts) {
+    list.push({
+      phone: phone,
+      name: blockedContacts[phone].name || "Customer",
+      blockedAt: blockedContacts[phone].blockedAt
+    });
+  }
+  res.json(list);
 });
 
 // GET MESSAGES FOR A CONTACT
