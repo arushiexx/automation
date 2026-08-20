@@ -695,9 +695,20 @@ textarea.s-input {
 <!-- SCREEN 1: CONTACTS -->
 <div id="contactScreen">
 <div class="screen-header">
+<div class="my-dp-avatar" onclick="openSettings()" title="Business Profile" style="width:40px; height:40px; border-radius:50%; background:#00a884; cursor:pointer; overflow:hidden; flex-shrink:0; margin-right:4px; box-shadow:0 2px 6px rgba(0,0,0,0.4); border:2px solid #00a884;">
+  <img id="myHeaderDp" src="/api/profile-picture" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.src='https://ui-avatars.com/api/?name=WhatsApp&background=00a884&color=fff'">
+</div>
 <h3>Chats</h3>
-<button class="hdr-btn" onclick="openSettings()" title="Settings">&#9881;</button>
 <button class="hdr-btn" onclick="loadConversations()" title="Refresh">&#8635;</button>
+<button class="hdr-btn" onclick="toggleContactMenu(event)" title="More Options" style="font-size:20px; font-weight:bold; position:relative;">&#8942;</button>
+
+<!-- CONTACTS TOP THREE-DOT DROPDOWN MENU -->
+<div id="contactHeaderMenu" style="display:none; position:absolute; top:54px; right:12px; z-index:300; background:#233138; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.6); padding:6px 0; min-width:190px; border:1px solid #2a3942;">
+  <div class="menu-item" onclick="closeContactMenu(); openSettings();"><span style="font-size:16px;">👤</span> Profile & DP</div>
+  <div class="menu-item" onclick="closeContactMenu(); openSettings();"><span style="font-size:16px;">🤖</span> Auto-Reply Settings</div>
+  <div class="menu-item" onclick="closeContactMenu(); loadConversations();"><span style="font-size:16px;">🔄</span> Refresh Chats</div>
+  <div class="menu-item danger" onclick="closeContactMenu(); doLogout();"><span style="font-size:16px;">🚪</span> Logout</div>
+</div>
 </div>
 <div class="search-box">
 <input type="text" id="searchInput" placeholder="Search contacts..." oninput="filterContacts()">
@@ -752,34 +763,56 @@ textarea.s-input {
 </div>
 </div>
 
-<!-- SCREEN 3: SETTINGS -->
+<!-- SCREEN 3: SETTINGS / PROFILE -->
 <div id="settingsScreen">
-<div class="settings-hdr">
-<button class="hdr-btn" onclick="closeSettings()">&#8592;</button>
-<h3>Settings</h3>
-</div>
-<div class="settings-section">
-<h4>Profile Picture</h4>
-<img id="dpPreview" class="dp-preview" src="" alt="DP">
-<input type="file" id="dpFile" accept="image/jpeg,image/png" class="s-file" style="display:none" onchange="openCropModal(event)">
-<button class="s-btn" onclick="document.getElementById('dpFile').click()">Change DP</button>
-<div class="status-msg" id="dpStatus"></div>
-</div>
-<div class="settings-section">
-<h4>Profile Info</h4>
-<label>About</label>
-<input type="text" id="profileAbout" class="s-input" placeholder="Hey there!">
-<label style="margin-top:10px">Description</label>
-<textarea id="profileDesc" class="s-input" placeholder="Business description..."></textarea>
-<button class="s-btn" onclick="updateProfile()">Save Profile</button>
-<div class="status-msg" id="profileStatus"></div>
-</div>
-<div class="settings-section">
-<h4>Auto-Reply Message</h4>
-<textarea id="autoReplyMsg" class="s-input" placeholder="Auto reply message..."></textarea>
-<button class="s-btn" onclick="updateAutoReply()">Save Auto-Reply</button>
-<div class="status-msg" id="arStatus"></div>
-</div>
+  <div class="settings-hdr" style="background:#202c33; padding:14px 16px; min-height:60px;">
+    <button class="hdr-btn" onclick="closeSettings()" style="margin-right:12px; font-size:22px; color:#aebac1;">&#8592;</button>
+    <h3 style="font-size:19px; font-weight:600; color:#e9edef;">Profile & Settings</h3>
+  </div>
+
+  <!-- WHATSAPP STYLE DP AVATAR CHANGE AREA -->
+  <div style="background:#111b21; padding:32px 20px 24px 20px; text-align:center; position:relative; border-bottom:1px solid rgba(134,150,160,0.1);">
+    <div style="position:relative; width:150px; height:150px; margin:0 auto; cursor:pointer;" onclick="document.getElementById('dpFile').click()" title="Click to Change Profile Photo">
+      <img id="dpPreview" src="" alt="Profile DP" style="width:100%; height:100%; border-radius:50%; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.5); border:3px solid #00a884; display:block;">
+      <!-- CAMERA HOVER OVERLAY -->
+      <div style="position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; background:rgba(0,0,0,0.6); display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s ease;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+        <span style="font-size:28px;">📷</span>
+        <span style="font-size:11px; font-weight:700; color:#fff; margin-top:4px; text-transform:uppercase; letter-spacing:0.5px;">CHANGE<br>PHOTO</span>
+      </div>
+    </div>
+    <input type="file" id="dpFile" accept="image/jpeg,image/png" style="display:none" onchange="openCropModal(event)">
+    <div style="margin-top:14px; font-size:13px; color:#8696a0;">Tap photo to change WhatsApp Profile Picture</div>
+    <div class="status-msg" id="dpStatus" style="max-width:320px; margin:10px auto;"></div>
+  </div>
+
+  <!-- PROFILE BUSINESS INFO SECTION -->
+  <div class="settings-section">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+      <span style="font-size:18px;">👤</span>
+      <h4 style="margin:0; color:#00a884; font-size:14px; text-transform:uppercase; font-weight:700; letter-spacing:0.8px;">Your Name / Business Name</h4>
+    </div>
+    <input type="text" id="profileAbout" class="s-input" placeholder="e.g. Janhvi Store / Official Business" style="font-size:15px; padding:12px 14px; background:#202c33; border:1px solid #2a3942;">
+    
+    <div style="display:flex; align-items:center; gap:8px; margin-top:20px; margin-bottom:12px;">
+      <span style="font-size:18px;">ℹ️</span>
+      <h4 style="margin:0; color:#00a884; font-size:14px; text-transform:uppercase; font-weight:700; letter-spacing:0.8px;">About / Bio</h4>
+    </div>
+    <textarea id="profileDesc" class="s-input" placeholder="WhatsApp Business Description..." style="min-height:90px; font-size:15px; padding:12px 14px; background:#202c33; border:1px solid #2a3942;"></textarea>
+    
+    <button class="s-btn" onclick="updateProfile()" style="margin-top:16px; font-size:15px; font-weight:700; padding:12px; border-radius:10px;">Save Profile Info</button>
+    <div class="status-msg" id="profileStatus"></div>
+  </div>
+
+  <!-- AUTO-REPLY MESSAGE SECTION -->
+  <div class="settings-section">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+      <span style="font-size:18px;">🤖</span>
+      <h4 style="margin:0; color:#00a884; font-size:14px; text-transform:uppercase; font-weight:700; letter-spacing:0.8px;">Auto-Reply Bot Message</h4>
+    </div>
+    <textarea id="autoReplyMsg" class="s-input" placeholder="Auto reply message..." style="min-height:120px; font-size:15px; padding:12px 14px; background:#202c33; border:1px solid #2a3942;"></textarea>
+    <button class="s-btn" onclick="updateAutoReply()" style="margin-top:16px; font-size:15px; font-weight:700; padding:12px; border-radius:10px;">Save Auto-Reply Message</button>
+    <div class="status-msg" id="arStatus"></div>
+  </div>
 </div>
 
 <!-- CROP MODAL -->
@@ -946,6 +979,18 @@ function toggleHeaderMenu(e) {
   menu.style.display = menu.style.display === "block" ? "none" : "block";
 }
 
+function toggleContactMenu(e) {
+  if (e) e.stopPropagation();
+  var menu = document.getElementById("contactHeaderMenu");
+  if (!menu) return;
+  menu.style.display = menu.style.display === "block" ? "none" : "block";
+}
+
+function closeContactMenu() {
+  var menu = document.getElementById("contactHeaderMenu");
+  if (menu) menu.style.display = "none";
+}
+
 function closeHeaderMenu() {
   var menu = document.getElementById("chatHeaderMenu");
   if (menu) menu.style.display = "none";
@@ -953,6 +998,7 @@ function closeHeaderMenu() {
 
 document.addEventListener("click", function() {
   closeHeaderMenu();
+  closeContactMenu();
 });
 
 function checkBlockedStatus(phone) {
