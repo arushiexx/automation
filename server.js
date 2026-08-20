@@ -745,18 +745,14 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
 
   var fileBuffer = fs.readFileSync(filePath);
 
-  var mime = (req.file.mimetype || "").toLowerCase();
-  var isVideo = mime.startsWith("video/") || (req.file.originalname && req.file.originalname.match(/\.(mp4|mov|3gp|mkv|avi|webm)$/i));
-  var mediaType = isVideo ? "video" : "image";
-
-  // Method 1: Upload directly to Meta Media API and send native WhatsApp media
+  // Method 1: Upload directly to Meta Media API and send native WhatsApp image
   try {
     var formData = new FormData();
     formData.append("messaging_product", "whatsapp");
-    formData.append("type", req.file.mimetype || (isVideo ? "video/mp4" : "image/jpeg"));
+    formData.append("type", req.file.mimetype || "image/jpeg");
     formData.append("file", fileBuffer, {
-      filename: req.file.originalname || (isVideo ? "video.mp4" : "image.jpg"),
-      contentType: req.file.mimetype || (isVideo ? "video/mp4" : "image/jpeg"),
+      filename: req.file.originalname || "image.jpg",
+      contentType: req.file.mimetype || "image/jpeg",
     });
 
     var uploadRes = await axios.post(
@@ -771,13 +767,6 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
 
     var mediaId = uploadRes.data && uploadRes.data.id;
     if (mediaId) {
-      var mediaPayload = {
-        messaging_product: "whatsapp",
-        to: phone,
-        type: mediaType,
-      };
-      mediaPayload[mediaType] = { id: mediaId };
-
       var sendRes = await axios({
         method: "POST",
         url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
@@ -785,18 +774,22 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
           Authorization: "Bearer " + WHATSAPP_TOKEN,
           "Content-Type": "application/json",
         },
-        data: mediaPayload,
+        data: {
+          messaging_product: "whatsapp",
+          to: phone,
+          type: "image",
+          image: { id: mediaId }
+        },
       });
 
       var sentId = sendRes.data && sendRes.data.messages && sendRes.data.messages[0] ? sendRes.data.messages[0].id : null;
-      var storeTag = isVideo ? "[OUT_VIDEO_MEDIA:" + mediaId + "]" : "[OUT_IMAGE_MEDIA:" + mediaId + "]";
-      storeMessage(phone, "You", storeTag, "out", sentId, "sent");
+      storeMessage(phone, "You", "[OUT_IMAGE_MEDIA:" + mediaId + "]", "out", sentId, "sent");
 
       if (fs.existsSync(filePath)) {
         try { fs.unlinkSync(filePath); } catch(e) {}
       }
 
-      return res.json({ success: true, mediaId: mediaId, mediaType: mediaType });
+      return res.json({ success: true, mediaId: mediaId });
     }
   } catch (err1) {
     console.error("Meta Media Upload failed:", err1.response ? err1.response.data : err1.message);
@@ -808,13 +801,6 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
     var protocol = req.headers["x-forwarded-proto"] || "https";
     var fileUrl = protocol + "://" + hostHeader + "/uploads/" + fileName;
 
-    var mediaPayload2 = {
-      messaging_product: "whatsapp",
-      to: phone,
-      type: mediaType,
-    };
-    mediaPayload2[mediaType] = { link: fileUrl };
-
     var sendRes2 = await axios({
       method: "POST",
       url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
@@ -822,15 +808,19 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
         Authorization: "Bearer " + WHATSAPP_TOKEN,
         "Content-Type": "application/json",
       },
-      data: mediaPayload2,
+      data: {
+        messaging_product: "whatsapp",
+        to: phone,
+        type: "image",
+        image: { link: fileUrl }
+      },
     });
 
     var sentId2 = sendRes2.data && sendRes2.data.messages && sendRes2.data.messages[0] ? sendRes2.data.messages[0].id : null;
-    var storeTag2 = isVideo ? "[OUT_VIDEO:" + fileUrl + "]" : "[OUT_IMAGE:" + fileUrl + "]";
-    storeMessage(phone, "You", storeTag2, "out", sentId2, "sent");
-    res.json({ success: true, url: fileUrl, mediaType: mediaType });
+    storeMessage(phone, "You", "[OUT_IMAGE:" + fileUrl + "]", "out", sentId2, "sent");
+    res.json({ success: true, url: fileUrl });
   } catch (err2) {
-    console.error("Media Send Error:", err2.response ? err2.response.data : err2.message);
+    console.error("Image Send Error:", err2.response ? err2.response.data : err2.message);
     res.status(500).json({ error: (err2.response && err2.response.data && err2.response.data.error && err2.response.data.error.message) || err2.message });
   } finally {
     if (fs.existsSync(filePath)) {
