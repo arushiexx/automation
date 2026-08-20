@@ -339,6 +339,9 @@ var content = m.text.replace(/\n/g,"<br>");
 if (m.text.startsWith("[IMAGE:")) {
   var mediaId = m.text.substring(7, m.text.length-1);
   content = '<img src="/api/media/' + mediaId + '?token=' + TOKEN + '" style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block">';
+} else if (m.text.startsWith("[OUT_IMAGE_MEDIA:")) {
+  var mediaId = m.text.substring(17, m.text.length-1);
+  content = '<img src="/api/media/' + mediaId + '?token=' + TOKEN + '" style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block">';
 } else if (m.text.startsWith("[OUT_IMAGE:")) {
   var url = m.text.substring(11, m.text.length-1);
   content = '<img src="' + url + '" style="max-width:100%;border-radius:8px;margin-bottom:4px;display:block">';

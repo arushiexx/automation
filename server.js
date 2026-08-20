@@ -369,6 +369,8 @@ app.get("/", function(req, res) {
   });
 });
 
+const FormData = require("form-data");
+
 // PROXY MEDIA
 app.get("/api/media/:id", authCheck, async function(req, res) {
   try {
@@ -383,10 +385,12 @@ app.get("/api/media/:id", authCheck, async function(req, res) {
       responseType: "stream",
       headers: { Authorization: "Bearer " + WHATSAPP_TOKEN }
     });
-    res.set("Content-Type", mediaRes.headers["content-type"]);
+    var contentType = mediaRes.headers["content-type"] || "image/jpeg";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", "inline");
     mediaRes.data.pipe(res);
   } catch(e) {
-    res.status(500).send("Error");
+    res.status(500).send("Error loading media");
   }
 });
 
@@ -395,9 +399,40 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
   var phone = req.body.phone;
   if (!phone || !req.file) return res.status(400).json({error: "Missing phone or file"});
 
-  var fileUrl = "https://" + req.get("host") + "/uploads/" + req.file.filename;
+  var filePath = req.file.path;
+
+  // Auto-delete file from server after 1 minute (60,000 ms)
+  setTimeout(function() {
+    if (fs.existsSync(filePath)) {
+      fs.unlink(filePath, function(err) {
+        if (!err) console.log("🗑️ Auto-deleted uploaded image after 1 minute:", req.file.filename);
+      });
+    }
+  }, 60 * 1000);
 
   try {
+    // 1. Upload image directly to Meta WhatsApp Media Endpoint
+    var formData = new FormData();
+    formData.append("file", fs.createReadStream(filePath));
+    formData.append("type", req.file.mimetype || "image/jpeg");
+    formData.append("messaging_product", "whatsapp");
+
+    var uploadRes = await axios.post(
+      "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/media",
+      formData,
+      {
+        headers: Object.assign({}, formData.getHeaders(), {
+          Authorization: "Bearer " + WHATSAPP_TOKEN,
+        }),
+      }
+    );
+
+    var mediaId = uploadRes.data && uploadRes.data.id;
+    if (!mediaId) throw new Error("No media ID returned from Meta");
+
+    console.log("Uploaded media to Meta, Media ID: " + mediaId);
+
+    // 2. Send image message using media ID
     await axios({
       method: "POST",
       url: "https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages",
@@ -409,15 +444,15 @@ app.post("/api/send-media", authCheck, upload.single("file"), async function(req
         messaging_product: "whatsapp",
         to: phone,
         type: "image",
-        image: { link: fileUrl }
+        image: { id: mediaId }
       },
     });
 
-    storeMessage(phone, "You", "[OUT_IMAGE:" + fileUrl + "]", "out");
-    res.json({success: true});
+    storeMessage(phone, "You", "[OUT_IMAGE_MEDIA:" + mediaId + "]", "out");
+    res.json({success: true, mediaId: mediaId});
   } catch (error) {
     console.error("Failed to send image:", error.response ? error.response.data : error.message);
-    res.status(500).json({error: "Failed to send image"});
+    res.status(500).json({error: (error.response && error.response.data && error.response.data.error && error.response.data.error.message) || error.message});
   }
 });
 
